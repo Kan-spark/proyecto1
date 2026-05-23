@@ -1,0 +1,107 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// 1. USUARIOS Y PERFILES
+model User {
+  id          Int      @id @default(autoincrement())
+  email       String   @unique
+  password    String   // Para la seguridad de la cuenta
+  fullName    String
+  phone       String
+  role        Role     @default(BUYER) // Diferencia si es Productor o Comprador
+  isVerified  Boolean  @default(false) // Requerimiento: Verificación básica
+  createdAt   DateTime @default(now())
+
+  // Relaciones
+  products    Product[] // Productos que publica (si es productor)
+  orders      Order[]   // Pedidos que realiza (si es comprador)
+  reviewsSent Review[]  // Reseñas que escribe
+}
+
+enum Role {
+  PRODUCER
+  BUYER
+}
+
+// 2. PRODUCTOS
+model Product {
+  id          Int      @id @default(autoincrement())
+  title       String   // Ej: "Camarón Tití Fresco" o "Bulto de Papa Pastusa"
+  description String?
+  price       Decimal  // Precio por unidad de medida
+  unit        String   // Ej: "KG", "Libra", "Bulto", "Tonelada"
+  stock       Float    // Requerimiento: Cantidad disponible actualizada
+  location    String   // Requerimiento: Ubicación del producto
+  category    Category
+  imageUrl    String?  // Requerimiento: Fotografía del producto
+  createdAt   DateTime @default(now())
+
+  // Relaciones
+  producerId  Int
+  producer    User     @relation(fields: [producerId], references: [id])
+  orderItems  OrderItem[]
+}
+
+enum Category {
+  PESQUERO
+  AGROPECUARIO
+}
+
+// 3. PEDIDOS (Transacciones y confirmación clara)
+model Order {
+  id          Int         @id @default(autoincrement())
+  createdAt   DateTime    @default(now())
+  status      OrderStatus @default(PENDING) // Requerimiento: Confirmación clara de pedidos
+  total       Decimal
+
+  // Relaciones
+  buyerId     Int
+  buyer       User        @relation(fields: [buyerId], references: [id])
+  items       OrderItem[]
+  reviews     Review[]
+}
+
+enum OrderStatus {
+  PENDING   // El comprador solicitó el producto
+  CONFIRMED // El productor aceptó el pedido (Procesos claros)
+  DELIVERED // Producto entregado con éxito
+  CANCELLED // Pedido cancelado
+}
+
+// 4. DETALLE DEL PEDIDO (La cantidad exacta que se compró)
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  quantity  Float
+  price     Decimal // Se guarda el precio del momento de la compra
+
+  // Relaciones
+  orderId   Int
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+// 5. CALIFICACIONES Y RESEÑAS (Seguridad y Confianza)
+model Review {
+  id        Int      @id @default(autoincrement())
+  rating    Int      // Calificación del 1 al 5
+  comment   String?
+  createdAt DateTime @default(now())
+
+  // Relaciones
+  orderId   Int
+  order     Order    @relation(fields: [orderId], references: [id])
+  authorId  Int      // Quién califica
+  author    User     @relation(fields: [authorId], references: [id])
+}

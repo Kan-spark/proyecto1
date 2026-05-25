@@ -118,7 +118,6 @@ El sistema contará con entidades persistentes almacenadas en una base de datos:
 
 - Productos pesqueros
 - Productos agrícolas
-- Productos pecuarios
 
 ## 4. Pedidos
 
@@ -154,18 +153,15 @@ CADENA JUSTA corresponde a un sistema de información transaccional orientado a 
 
 ## Frontend
 
-- HTML5
-- CSS
-- Bootstrap
-- JavaScript
+- React.js
 
 ## Backend
 
-- Node.js
+- NestJS
 
 ## Base de datos
 
-- MySQL
+- PostgreSQL
 
 ---
 

@@ -50,7 +50,7 @@ Crear experiencias digitales que inspiren, simplifiquen y generen valor real par
 
 <!-- Agrega aquí tarjetas de proyectos -->
 
-- **[Cadena Justa]** - Breve descripción
+- **[Cadena Justa]** - CADENA JUSTA es una plataforma web transaccional orientada a la compra y venta de productos pesqueros y agropecuarios. El sistema permitirá conectar directamente a pescadores, agricultores y compradores para comercializar productos de manera rápida, segura y organizada
 
 → [Ver todos nuestros proyectos](https://github.com/KanSpark)
 

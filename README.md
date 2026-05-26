@@ -1,188 +1,87 @@
-# proyecto1
+# KAN SPARK 🚀
 
-# CADENA JUSTA
-## Plataforma web de compra y venta de productos pesqueros y agropecuarios
+**Desarrollo de Software que Enciende Ideas**
+
+![Texto alternativo](https://github.com/Kan-spark/proyecto1/blob/f80f3f9ef99492945003c20fcd7b4fd6121ee504/LOGO.jpeg)
+
+## Sobre Nosotros
+
+**KAN SPARK** es una compañía de desarrollo de software especializada en crear **soluciones digitales innovadoras**, escalables y de alto rendimiento.
+
+Transformamos ideas en productos digitales excepcionales que impulsan el crecimiento de negocios. Combinamos **creatividad, tecnología de vanguardia y ejecución impecable** para entregar software que realmente marca la diferencia.
+
+### Nuestra Misión
+Crear experiencias digitales que inspiren, simplifiquen y generen valor real para nuestros clientes y sus usuarios.
 
 ---
 
-# Equipo
-
+### Equipo de trabajo
 - Yazmin Natalia Delgado Solis
 - Alvaro Andres Palacios de la Cruz
 - Katerin Alejandra Guaical Melo
 
----
+## ¿Qué Hacemos?
 
-# Idea del proyecto
-
-CADENA JUSTA es una plataforma web transaccional orientada a la compra y venta de productos pesqueros y agropecuarios. El sistema permitirá conectar directamente a pescadores, agricultores y compradores para comercializar productos de manera rápida, segura y organizada.
-
-La plataforma permitirá que los productores publiquen sus productos disponibles, mientras que los clientes podrán navegar por el catálogo, realizar pedidos y coordinar entregas o puntos de recogida. El sistema estará dirigido especialmente a pequeños productores de comunidades costeras y rurales que actualmente tienen dificultades para vender sus productos de manera digital y obtener precios justos.
-
-Además, el sistema será completamente navegable desde el navegador web y contará con autenticación de usuarios, gestión de productos, pedidos y registros de compra.
-
----
-
-# Usuario objetivo
-
-La aplicación está dirigida a:
-
-- Pescadores artesanales
-- Agricultores y productores rurales
-- Comerciantes locales
-- Consumidores que buscan productos frescos y de origen local
+- **Desarrollo Web y Móvil** (Frontend & Backend)
+- **Aplicaciones a Medida**
+- **Plataformas SaaS**
+- **E-commerce**
+- **Inteligencia Artificial & Machine Learning**
+- **Soluciones Cloud (AWS, Azure, GCP)**
+- **DevOps & CI/CD**
+- **Mantenimiento y Evolución de Software**
 
 ---
 
-# Problema que resuelve
+## Tecnologías que Dominamos
 
-En muchas comunidades pesqueras y agropecuarias, los productores dependen de intermediarios para vender sus productos, lo que reduce sus ganancias y limita el acceso directo a los clientes.
+![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![Next.js](https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-FF9900?style=for-the-badge&logo=amazonaws&logoColor=white)
 
-Actualmente existen diferentes dificultades como:
-
-- Falta de una plataforma local organizada para ofrecer productos frescos.
-- Dificultad para encontrar productores confiables.
-- Ventas realizadas de manera informal mediante llamadas o mensajes.
-- Baja visibilidad de los productos disponibles por parte de los productores.
-
-CADENA JUSTA busca digitalizar este proceso y facilitar la conexión directa entre productores y consumidores, promoviendo un comercio más justo y organizado.
+**Y muchas más:** Laravel, Flutter, React Native, Docker, Kubernetes, PostgreSQL, MongoDB, etc.
 
 ---
 
-# Objetivo general
+## Proyectos Destacados
 
-Desarrollar una plataforma web transaccional para la compra y venta de productos pesqueros y agropecuarios, permitiendo a los productores publicar sus productos y a los clientes realizar pedidos de forma sencilla, rápida y segura.
+<!-- Agrega aquí tarjetas de proyectos -->
 
----
+- **[Cadena Justa]** - Breve descripción
 
-# Funcionalidades principales
-
-## Para productores
-
-- Registro e inicio de sesión.
-- Publicación de productos disponibles.
-- Actualización de precios y cantidades.
-- Gestión de pedidos recibidos.
-- Consulta del historial de ventas.
-
-## Para compradores
-
-- Registro e inicio de sesión.
-- Búsqueda de productos por categorías.
-- Agregar productos al carrito de compras.
-- Realizar pedidos en línea.
-- Consultar historial de compras.
-
-## Para administradores
-
-- Gestión de usuarios.
-- Supervisión de publicaciones.
-- Control de pedidos.
-- Generación de reportes básicos.
+→ [Ver todos nuestros proyectos](https://github.com/KanSpark)
 
 ---
 
-# Páginas principales del sistema
+## ¿Por qué elegir KAN SPARK?
 
-- Página de inicio
-- Página de registro e inicio de sesión
-- Catálogo de productos
-- Formulario para publicar productos
-- Carrito de compras
-- Página de pedidos
-- Panel de administración
-- Perfil de usuario
+- **Equipo senior** con más de 8 años de experiencia promedio
+- **Metodología ágil** (Scrum + Kanban)
+- **Calidad obsesiva** y pruebas automatizadas
+- **Comunicación transparente** en español e inglés
+- **Soporte y mantenimiento** continuo
+- **Enfoque en resultados** de negocio, no solo código
 
 ---
 
-# Entidades principales del sistema
+## Contáctanos
 
-El sistema contará con entidades persistentes almacenadas en una base de datos:
+**¿Listo para llevar tu idea al siguiente nivel?**
 
-## 1. Usuarios
-
-- Datos personales
-- Rol (comprador, productor o administrador)
-- Correo electrónico
-- Contraseña
-
-## 2. Productos
-
-- Nombre del producto
-- Descripción
-- Precio
-- Cantidad disponible
-- Imagen
-
-## 3. Categorías
-
-- Productos pesqueros
-- Productos agrícolas
-
-## 4. Pedidos
-
-- Fecha del pedido
-- Estado del pedido
-- Total de compra
-
-## 5. Detalle del pedido
-
-- Producto
-- Cantidad
-- Subtotal
-
-## 6. Pagos (opcional)
-
-- Método de pago
-- Estado del pago
-
-## 7. Reseñas o calificaciones (opcional)
-
-- Comentarios
-- Puntuación
+- **Email:** kanspark@gmail.com 
+- **WhatsApp:** [+57 3152299986](https://wa.me/57XXXXXXXXXX)
 
 ---
 
-# Tipo de sistema
+## ¡Hablemos!
 
-CADENA JUSTA corresponde a un sistema de información transaccional orientado a la web, ya que permite realizar operaciones de compra y venta en tiempo real mediante transacciones registradas en una base de datos.
+Estamos siempre abiertos a nuevas colaboraciones y desafíos interesantes.
 
----
-
-# Tecnologías propuestas
-
-## Frontend
-
-- React.js
-
-## Backend
-
-- NestJS
-
-## Base de datos
-
-- PostgreSQL
+**KAN SPARK** — *Donde las ideas se convierten en productos brillantes.*
 
 ---
 
-# Factibilidad del proyecto
-
-El proyecto es viable para desarrollarse en equipo debido a que:
-
-- Puede dividirse en módulos como usuarios, productos, pedidos y administración.
-- Utiliza tecnologías básicas y accesibles vistas en el curso.
-- Resuelve una necesidad real de productores locales.
-- Permite implementar funcionalidades de manera progresiva.
-- No requiere infraestructura compleja para su desarrollo.
-
----
-
-# Valor agregado
-
-- Impulsa el comercio local.
-- Reduce la dependencia de intermediarios.
-- Facilita el acceso a productos frescos y de calidad.
-- Promueve la transformación digital de comunidades rurales y pesqueras.
-- Tiene potencial para adaptarse posteriormente a aplicaciones móviles.
-
-![Texto alternativo](https://github.com/Kan-spark/proyecto1/blob/f80f3f9ef99492945003c20fcd7b4fd6121ee504/LOGO.jpeg)
+*Hecho con ❤️ en Colombia*

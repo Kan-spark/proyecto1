@@ -7,32 +7,43 @@ import {
   Patch,
   ParseIntPipe,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentUser } from '../auth/current-user.decorator';
+
+@UseGuards(JwtAuthGuard)
 @Controller('orders')
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
   // Crear pedido
   @Post()
-  create(@Body() createOrderDto: CreateOrderDto) {
-    return this.ordersService.create(createOrderDto);
+  create(
+    @CurrentUser() user: any,
+    @Body() createOrderDto: CreateOrderDto,
+  ) {
+    return this.ordersService.create(
+      user.id,
+      createOrderDto,
+    );
   }
 
-  // Historial por usuario
-  // Ejemplo:
-  // GET /orders/user/1?role=BUYER
-  // GET /orders/user/2?role=PRODUCER
-  @Get('user/:userId')
-  findAllByUser(
-    @Param('userId', ParseIntPipe) userId: number,
+  // Historial del usuario autenticado
+  @Get('my-orders')
+  findMyOrders(
+    @CurrentUser() user: any,
     @Query('role') role: 'BUYER' | 'PRODUCER',
   ) {
-    return this.ordersService.findAllByUser(userId, role);
+    return this.ordersService.findAllByUser(
+      user.id,
+      role,
+    );
   }
 
   // Obtener pedido por ID
@@ -44,14 +55,15 @@ export class OrdersController {
   }
 
   // Actualizar estado del pedido
-  // PATCH /orders/1/status
   @Patch(':id/status')
   updateStatus(
     @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: any,
     @Body() updateOrderStatusDto: UpdateOrderStatusDto,
   ) {
     return this.ordersService.updateStatus(
       id,
+      user.id,
       updateOrderStatusDto,
     );
   }

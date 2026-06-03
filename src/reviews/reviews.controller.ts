@@ -1,19 +1,41 @@
-import { Controller, Post, Body, Get, Param, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Param,
+  ParseIntPipe,
+  UseGuards,
+} from '@nestjs/common';
+
 import { ReviewsService } from './reviews.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentUser } from '../auth/current-user.decorator';
+
 @Controller('reviews')
 export class ReviewsController {
-  constructor(private readonly reviewsService: ReviewsService) {}
+  constructor(
+    private readonly reviewsService: ReviewsService,
+  ) {}
 
+  @UseGuards(JwtAuthGuard)
   @Post()
-  create(@Body() createReviewDto: CreateReviewDto) {
-    return this.reviewsService.create(createReviewDto);
+  create(
+    @CurrentUser() user: any,
+    @Body() createReviewDto: CreateReviewDto,
+  ) {
+    return this.reviewsService.create(
+      user.id,
+      createReviewDto,
+    );
   }
 
-  // Permite consultar las reseñas de un productor desde el perfil de la app móvil
   @Get('producer/:id')
-  findByProducer(@Param('id', ParseIntPipe) id: number) {
+  findByProducer(
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.reviewsService.findByProducer(id);
   }
 }

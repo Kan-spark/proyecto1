@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
+
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 
@@ -6,8 +11,15 @@ import { CreateReviewDto } from './dto/create-review.dto';
 export class ReviewsService {
   constructor(private prisma: PrismaService) {}
 
-  async create(createReviewDto: CreateReviewDto) {
-    const { orderId, authorId, rating, comment } = createReviewDto;
+  async create(
+    userId: number,
+    createReviewDto: CreateReviewDto,
+  ) {
+    const {
+      orderId,
+      rating,
+      comment,
+    } = createReviewDto;
 
     // 1. Verificar que el pedido exista
     const order = await this.prisma.order.findUnique({
@@ -15,46 +27,59 @@ export class ReviewsService {
     });
 
     if (!order) {
-      throw new NotFoundException(`El pedido con ID ${orderId} no existe`);
+      throw new NotFoundException(
+        `El pedido con ID ${orderId} no existe`,
+      );
     }
 
-    // 2. Validar seguridad: El autor de la reseña debe ser el mismo comprador del pedido
-    if (order.buyerId !== authorId) {
-      throw new BadRequestException('No tienes permisos para calificar un pedido que no realizaste');
+    // 2. Verificar que el usuario autenticado
+    // sea el comprador del pedido
+    if (order.buyerId !== userId) {
+      throw new BadRequestException(
+        'No tienes permisos para calificar un pedido que no realizaste',
+      );
     }
 
-    // 3. Validar si ya existe una reseña previa para este pedido (evitar duplicados)
-    const existingReview = await this.prisma.review.findFirst({
-      where: { orderId, authorId },
-    });
+    // 3. Evitar reseñas duplicadas
+    const existingReview =
+      await this.prisma.review.findFirst({
+        where: {
+          orderId,
+          authorId: userId,
+        },
+      });
 
     if (existingReview) {
-      throw new BadRequestException('Ya has calificado este pedido anteriormente');
+      throw new BadRequestException(
+        'Ya has calificado este pedido anteriormente',
+      );
     }
 
-    // 4. Guardar la calificación
+    // 4. Guardar reseña
     return this.prisma.review.create({
       data: {
         rating,
         comment,
         orderId,
-        authorId,
+        authorId: userId,
       },
     });
   }
 
-  // Obtener todas las reseñas de un productor específico para calcular su reputación
   async findByProducer(producerId: number) {
     return this.prisma.review.findMany({
       where: {
         order: {
           items: {
             some: {
-              product: { producerId },
+              product: {
+                producerId,
+              },
             },
           },
         },
       },
+
       include: {
         author: {
           select: {
@@ -62,6 +87,7 @@ export class ReviewsService {
           },
         },
       },
+
       orderBy: {
         createdAt: 'desc',
       },

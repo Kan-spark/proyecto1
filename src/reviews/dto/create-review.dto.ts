@@ -1,9 +1,22 @@
-import { IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class CreateReviewDto {
-  @IsInt({ message: 'La calificación debe ser un número entero' })
-  @Min(1, { message: 'La calificación mínima es 1 estrella' })
-  @Max(5, { message: 'La calificación máxima son 5 estrellas' })
+  @IsInt({
+    message: 'La calificación debe ser un número entero',
+  })
+  @Min(1, {
+    message: 'La calificación mínima es 1 estrella',
+  })
+  @Max(5, {
+    message: 'La calificación máxima son 5 estrellas',
+  })
   @IsNotEmpty()
   rating: number;
 
@@ -14,8 +27,4 @@ export class CreateReviewDto {
   @IsInt()
   @IsNotEmpty()
   orderId: number;
-
-  @IsInt()
-  @IsNotEmpty()
-  authorId: number; // El ID del comprador que califica
 }

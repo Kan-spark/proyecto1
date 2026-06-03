@@ -10,19 +10,22 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 
 @Injectable()
 export class OrdersService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
-  async create(createOrderDto: CreateOrderDto) {
-    const { buyerId, items } = createOrderDto;
+  async create(
+    userId: number,
+    createOrderDto: CreateOrderDto,
+  ) {
+    const { items } = createOrderDto;
 
-    // 1. Validar comprador
+    // 1. Validar comprador autenticado
     const buyer = await this.prisma.user.findUnique({
-      where: { id: buyerId },
+      where: { id: userId },
     });
 
     if (!buyer) {
       throw new NotFoundException(
-        `El comprador con ID ${buyerId} no existe`,
+        `El comprador con ID ${userId} no existe`,
       );
     }
 
@@ -30,7 +33,6 @@ export class OrdersService {
     return this.prisma.$transaction(async (tx) => {
       let orderTotal = 0;
 
-      // Array tipado correctamente
       const itemsToCreate: {
         productId: number;
         quantity: number;
@@ -43,21 +45,18 @@ export class OrdersService {
           where: { id: item.productId },
         });
 
-        // Validar existencia
         if (!product) {
           throw new NotFoundException(
             `El producto con ID ${item.productId} no existe`,
           );
         }
 
-        // Validar stock
         if (product.stock < item.quantity) {
           throw new BadRequestException(
             `Stock insuficiente para "${product.title}". Disponible: ${product.stock} ${product.unit}, Solicitado: ${item.quantity}`,
           );
         }
 
-        // Descontar stock
         await tx.product.update({
           where: { id: product.id },
           data: {
@@ -65,23 +64,21 @@ export class OrdersService {
           },
         });
 
-        // Calcular subtotal
         const itemPrice = Number(product.price);
 
         orderTotal += itemPrice * item.quantity;
 
-        // Guardar item del pedido
         itemsToCreate.push({
           productId: product.id,
           quantity: item.quantity,
-          price: itemPrice, // precio histórico
+          price: itemPrice,
         });
       }
 
       // 4. Crear pedido final
       return tx.order.create({
         data: {
-          buyerId,
+          buyerId: userId,
           total: orderTotal,
           status: 'PENDING',
 
@@ -109,21 +106,24 @@ export class OrdersService {
   }
 
   // Historial por usuario y rol
-  async findAllByUser(userId: number, role: 'BUYER' | 'PRODUCER') {
+  async findAllByUser(
+    userId: number,
+    role: 'BUYER' | 'PRODUCER',
+  ) {
     const whereClause =
       role === 'BUYER'
         ? {
-          buyerId: userId,
-        }
+            buyerId: userId,
+          }
         : {
-          items: {
-            some: {
-              product: {
-                producerId: userId,
+            items: {
+              some: {
+                product: {
+                  producerId: userId,
+                },
               },
             },
-          },
-        };
+          };
 
     return this.prisma.order.findMany({
       where: whereClause,
@@ -182,11 +182,15 @@ export class OrdersService {
   // Actualizar estado del pedido
   async updateStatus(
     id: number,
+    userId: number,
     updateOrderStatusDto: UpdateOrderStatusDto,
   ) {
     const order = await this.findOne(id);
 
-    // No permitir modificar pedidos entregados
+    // userId se recibe desde JWT
+    // más adelante agregaremos validación de permisos
+    // para verificar que el productor sea dueño de los productos
+
     if (order.status === 'DELIVERED') {
       throw new BadRequestException(
         'No se puede modificar un pedido entregado',

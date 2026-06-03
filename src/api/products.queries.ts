@@ -1,58 +1,73 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { productsApi, type CreateProductDto, type UpdateProductDto, type GetProductsFilterDto } from "./products";
+import {
+  productsApi,
+  type CreateProductDto,
+  type GetProductsFilterDto,
+  type UpdateProductDto,
+} from "./products";
+
+// ── Keys ─────────────────────────────────────────────────────────────────────
 
 const keys = {
-    all: ["products"] as const,
-    lists: () => ["products", "list"] as const,
-    listFiltered: (filters?: GetProductsFilterDto) => ["products", "list", { ...filters }] as const,
-    detail: (id: number) => ["products", "detail", id] as const,
+  all: ["products"] as const,
+  list: (filters: GetProductsFilterDto) =>
+    ["products", "list", filters] as const,
+  detail: (id: number) => ["products", id] as const,
 };
 
-export function useProducts(filters?: GetProductsFilterDto) {
-    return useQuery({
-        queryKey: keys.listFiltered(filters),
-        queryFn: () => productsApi.list(filters),
-    });
+// ── Queries ──────────────────────────────────────────────────────────────────
+
+/** Lista productos con filtros opcionales (GET /products) */
+function useProducts(filters: GetProductsFilterDto = {}) {
+  return useQuery({
+    queryKey: keys.list(filters),
+    queryFn: () => productsApi.list(filters),
+  });
 }
 
-export function useProductDetail(id: number) {
-    return useQuery({
-        queryKey: keys.detail(id),
-        queryFn: () => productsApi.getOne(id),
-        enabled: id > 0,
-    });
+/** Un producto por ID (GET /products/:id) */
+function useProduct(id: number) {
+  return useQuery({
+    queryKey: keys.detail(id),
+    queryFn: () => productsApi.findOne(id),
+    enabled: id > 0,
+  });
 }
 
-export function useCreateProduct() {
-    const qc = useQueryClient();
-    return useMutation({
-        mutationFn: (dto: CreateProductDto) => productsApi.create(dto),
-        onSuccess: () => {
-            // Invalida todas las listas de productos para forzar el refresco de catálogos
-            qc.invalidateQueries({ queryKey: keys.lists() });
-        },
-    });
+// ── Mutations ────────────────────────────────────────────────────────────────
+
+/** Crea un producto — solo PRODUCER (POST /products) */
+function useCreateProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: CreateProductDto) => productsApi.create(dto),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
+  });
 }
 
-export function useUpdateProduct() {
-    const qc = useQueryClient();
-    return useMutation({
-        mutationFn: ({ id, userId, dto }: { id: number; userId: number; dto: UpdateProductDto }) => 
-            productsApi.update(id, userId, dto),
-        onSuccess: (_, variables) => {
-            qc.invalidateQueries({ queryKey: keys.lists() });
-            qc.invalidateQueries({ queryKey: keys.detail(variables.id) });
-        },
-    });
+/** Actualiza un producto — solo PRODUCER dueño (PATCH /products/:id) */
+function useUpdateProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, dto }: { id: number; dto: UpdateProductDto }) =>
+      productsApi.update(id, dto),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
+  });
 }
 
-export function useDeleteProduct() {
-    const qc = useQueryClient();
-    return useMutation({
-        mutationFn: ({ id, userId }: { id: number; userId: number }) => 
-            productsApi.remove(id, userId),
-        onSuccess: () => {
-            qc.invalidateQueries({ queryKey: keys.lists() });
-        },
-    });
+/** Elimina un producto — solo PRODUCER dueño (DELETE /products/:id) */
+function useDeleteProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => productsApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
+  });
 }
+
+export {
+  useProducts,
+  useProduct,
+  useCreateProduct,
+  useUpdateProduct,
+  useDeleteProduct,
+};

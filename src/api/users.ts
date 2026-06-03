@@ -1,33 +1,53 @@
 import { http } from "./http";
+import type { Role } from "./auth";
 
-export type Role = "PRODUCER" | "BUYER";
+// ── Tipos alineados con el backend ───────────────────────────────────────────
 
-export type User = {
-    id: number;
-    email: string;
-    fullName: string;
-    phone: string;
-    role: Role;
-    isVerified: boolean;
-    createdAt?: string;
+export type Product = {
+  id: number;
+  name: string;
+  [key: string]: unknown;
 };
 
-export type CreateUserDto = {
-    email: string;
-    password?: string; // Opcional en el tipado si se maneja desde el registro
-    fullName: string;
-    phone: string;
-    role: Role;
+export type UserProfile = {
+  id: number;
+  email: string;
+  fullName: string;
+  phone: string;
+  role: Role;
+  isVerified: boolean;
+  createdAt: string;
+  products: Product[];
 };
 
-export type UpdateUserDto = Partial<CreateUserDto>;
+export type UpdateUserDto = {
+  email?: string;
+  password?: string;
+  fullName?: string;
+  phone?: string;
+  role?: Role;
+};
+
+export type UpdateUserResponse = {
+  id: number;
+  email: string;
+  fullName: string;
+  phone: string;
+  role: Role;
+  isVerified: boolean;
+  createdAt: string;
+};
+
+// ── Llamadas ─────────────────────────────────────────────────────────────────
 
 export const usersApi = {
-    list: () => http<User[]>("/users"),
-    getProfile: (id: number) => http<User>(`/users/${id}`),
-    register: (dto: CreateUserDto) => 
-        http<User>("/users/register", { method: "POST", body: JSON.stringify(dto) }),
-    update: (id: number, dto: UpdateUserDto) => 
-        http<User>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(dto) }),
-    remove: (id: number) => http<{ message: string }>(`/users/${id}`, { method: "DELETE" }),
+  /** GET /users/me — perfil completo con productos */
+  getMe: () => http<UserProfile>("/users/me"),
+
+  /** PATCH /users/me — actualiza campos opcionales */
+  updateMe: (dto: UpdateUserDto) =>
+    http<UpdateUserResponse>("/users/me", {
+      method: "PATCH",
+      body: JSON.stringify(dto),
+    }),
 };

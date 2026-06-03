@@ -1,47 +1,52 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ordersApi, type CreateOrderDto, type OrderStatus } from "./orders";
+import { ordersApi, type CreateOrderDto, type UpdateOrderStatusDto } from "./orders";
+
+// ── Keys ─────────────────────────────────────────────────────────────────────
 
 const keys = {
-    all: ["orders"] as const,
-    userHistory: (userId: number, role: "BUYER" | "PRODUCER") => ["orders", "user", userId, role] as const,
-    detail: (id: number) => ["orders", "detail", id] as const,
+  all: ["orders"] as const,
+  myOrders: (role: "BUYER" | "PRODUCER") => ["orders", "my-orders", role] as const,
+  detail: (id: number) => ["orders", id] as const,
 };
 
-export function useUserOrders(userId: number, role: "BUYER" | "PRODUCER") {
-    return useQuery({
-        queryKey: keys.userHistory(userId, role),
-        queryFn: () => ordersApi.listByUser(userId, role),
-        enabled: userId > 0, // Evita llamadas innecesarias si no hay ID de usuario activo
-    });
+// ── Queries ──────────────────────────────────────────────────────────────────
+
+/** GET /orders/my-orders?role=... */
+function useMyOrders(role: "BUYER" | "PRODUCER") {
+  return useQuery({
+    queryKey: keys.myOrders(role),
+    queryFn: () => ordersApi.myOrders(role),
+  });
 }
 
-export function useOrderDetail(id: number) {
-    return useQuery({
-        queryKey: keys.detail(id),
-        queryFn: () => ordersApi.getOne(id),
-        enabled: id > 0,
-    });
+/** GET /orders/:id */
+function useOrder(id: number) {
+  return useQuery({
+    queryKey: keys.detail(id),
+    queryFn: () => ordersApi.findOne(id),
+    enabled: id > 0,
+  });
 }
 
-export function useCreateOrder() {
-    const qc = useQueryClient();
-    return useMutation({
-        mutationFn: (dto: CreateOrderDto) => ordersApi.create(dto),
-        onSuccess: () => {
-            // Invalida el caché general de órdenes para reflejar la compra de inmediato
-            qc.invalidateQueries({ queryKey: keys.all });
-        },
-    });
+// ── Mutations ────────────────────────────────────────────────────────────────
+
+/** POST /orders */
+function useCreateOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: CreateOrderDto) => ordersApi.create(dto),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
+  });
 }
 
-export function useUpdateOrderStatus() {
-    const qc = useQueryClient();
-    return useMutation({
-        mutationFn: ({ id, status }: { id: number; status: OrderStatus }) => 
-            ordersApi.updateStatus(id, status),
-        onSuccess: (_, variables) => {
-            qc.invalidateQueries({ queryKey: keys.all });
-            qc.invalidateQueries({ queryKey: keys.detail(variables.id) });
-        },
-    });
+/** PATCH /orders/:id/status */
+function useUpdateOrderStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, dto }: { id: number; dto: UpdateOrderStatusDto }) =>
+      ordersApi.updateStatus(id, dto),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
+  });
 }
+
+export { useMyOrders, useOrder, useCreateOrder, useUpdateOrderStatus };

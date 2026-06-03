@@ -1,63 +1,93 @@
 import { http } from "./http";
 
+// ── Tipos ────────────────────────────────────────────────────────────────────
+
 export type Category = "PESQUERO" | "AGROPECUARIO";
 
-export type Product = {
-    id: number;
-    title: string;
-    description?: string | null;
-    price: number;
-    unit: string;
-    stock: number;
-    location: string;
-    category: Category;
-    imageUrl?: string | null;
-    producerId: number;
-    createdAt?: string;
-    producer?: {
-        fullName: string;
-        phone: string;
-        isVerified: boolean;
-    };
+export type ProductProducer = {
+  fullName: string;
+  phone: string;
+  isVerified: boolean;
 };
 
+export type Product = {
+  id: number;
+  title: string;
+  description?: string | null;
+  price: number;
+  unit: string;
+  stock: number;
+  location: string;
+  category: Category;
+  imageUrl?: string | null;
+  producerId: number;
+  createdAt: string;
+  producer: ProductProducer;
+};
+
+// ── DTOs ─────────────────────────────────────────────────────────────────────
+
 export type CreateProductDto = {
-    title: string;
-    description?: string;
-    price: number;
-    unit: string;
-    stock: number;
-    location: string;
-    category: Category;
-    imageUrl?: string;
-    producerId: number;
+  title: string;
+  description?: string;
+  price: number;
+  unit: string;
+  stock: number;
+  location: string;
+  category: Category;
+  imageUrl?: string;
 };
 
 export type UpdateProductDto = Partial<CreateProductDto>;
 
 export type GetProductsFilterDto = {
-    category?: Category;
-    location?: string;
-    minPrice?: string;
-    maxPrice?: string;
-    search?: string;
+  category?: Category;
+  location?: string;
+  minPrice?: string;
+  maxPrice?: string;
+  search?: string;
 };
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function buildQuery(filters: GetProductsFilterDto): string {
+  const params = new URLSearchParams();
+  if (filters.category) params.set("category", filters.category);
+  if (filters.location) params.set("location", filters.location);
+  if (filters.minPrice) params.set("minPrice", filters.minPrice);
+  if (filters.maxPrice) params.set("maxPrice", filters.maxPrice);
+  if (filters.search) params.set("search", filters.search);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+// ── Llamadas ─────────────────────────────────────────────────────────────────
+
 export const productsApi = {
-    list: (filters?: GetProductsFilterDto) => {
-        // Convertimos el objeto de filtros en Query Params (ej: ?category=PESQUERO&search=camaron)
-        const params = new URLSearchParams(filters as Record<string, string>).toString();
-        const queryStr = params ? `?${params}` : "";
-        return http<Product[]>(`/products${queryStr}`);
-    },
-    getOne: (id: number) => http<Product>(`/products/${id}`),
-    create: (dto: CreateProductDto) => 
-        http<Product>("/products", { method: "POST", body: JSON.stringify(dto) }),
-    update: (id: number, userId: number, dto: UpdateProductDto) => 
-        http<Product>(`/products/${id}`, { 
-            method: "PATCH", 
-            body: JSON.stringify({ ...dto, userId }) // Inyectamos el userId en el body requerido por el backend
-        }),
-    remove: (id: number, userId: number) => 
-        http<{ message: string }>(`/products/${id}?userId=${userId}`, { method: "DELETE" }), // Pasado como query param
+  /** GET /products — público, acepta filtros como query params */
+  list: (filters: GetProductsFilterDto = {}) =>
+    http<Product[]>(`/products${buildQuery(filters)}`),
+
+  /** GET /products/:id — público */
+  findOne: (id: number) => http<Product>(`/products/${id}`),
+
+  /** POST /products — requiere JWT + rol PRODUCER */
+  create: (dto: CreateProductDto) =>
+    http<Product>("/products", {
+      method: "POST",
+      body: JSON.stringify(dto),
+    }),
+
+  /** PATCH /products/:id — requiere JWT + ser el PRODUCER dueño */
+  update: (id: number, dto: UpdateProductDto) =>
+    http<Product>(`/products/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(dto),
+    }),
+
+  /** DELETE /products/:id — requiere JWT + ser el PRODUCER dueño */
+  remove: (id: number) =>
+    http<{ message: string }>(`/products/${id}`, {
+      method: "DELETE",
+    }),
 };

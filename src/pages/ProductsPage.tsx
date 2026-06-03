@@ -1,254 +1,570 @@
 import { useState } from "react";
-import { useProducts, useCreateProduct, useDeleteProduct } from "../api/products.queries";
-import type { Category } from "../api/products";
+import { useAuth } from "../context/AuthContext";
+import {
+  useProducts,
+  useCreateProduct,
+  useUpdateProduct,
+  useDeleteProduct,
+} from "../api/products.queries";
+import type { Category, CreateProductDto, Product, UpdateProductDto } from "../api/products";
+
+// ── Constantes ────────────────────────────────────────────────────────────────
+
+const CATEGORIES: { value: Category; label: string }[] = [
+  { value: "PESQUERO", label: "Pesquero" },
+  { value: "AGROPECUARIO", label: "Agropecuario" },
+];
+
+const EMPTY_FORM: CreateProductDto = {
+  title: "",
+  description: "",
+  price: 0,
+  unit: "",
+  stock: 0,
+  location: "",
+  category: "AGROPECUARIO",
+  imageUrl: "",
+};
+
+// ── Componente principal ──────────────────────────────────────────────────────
 
 export default function ProductsPage() {
-  // Estado simulado para saber qué usuario interactúa (Productor dueño o Comprador)
-  const [simulatedProducerId, setSimulatedProducerId] = useState<number>(1);
+  const { user } = useAuth();
+  const isProducer = user?.role === "PRODUCER";
 
-  // TanStack Query maneja la carga, errores y datos automáticamente
-  const { data: products = [], isLoading, isError, error, refetch } = useProducts();
+  // ── Filtros ────────────────────────────────────────────────────────────────
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<Category | "">("");
+  const [locationFilter, setLocationFilter] = useState("");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+
+  // Solo envía filtros no vacíos al query
+  const activeFilters = {
+    ...(search && { search }),
+    ...(categoryFilter && { category: categoryFilter as Category }),
+    ...(locationFilter && { location: locationFilter }),
+    ...(minPrice && { minPrice }),
+    ...(maxPrice && { maxPrice }),
+  };
+
+  const { data: products = [], isLoading, isError, error } = useProducts(activeFilters);
   const createMut = useCreateProduct();
+  const updateMut = useUpdateProduct();
   const deleteMut = useDeleteProduct();
 
-  // Estados locales para los campos del formulario de creación
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [price, setPrice] = useState("");
-  const [unit, setUnit] = useState("KG");
-  const [stock, setStock] = useState("");
-  const [location, setLocation] = useState("");
-  const [category, setCategory] = useState<Category>("AGROPECUARIO");
+  // ── Modal crear / editar ───────────────────────────────────────────────────
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [form, setForm] = useState<CreateProductDto>(EMPTY_FORM);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  // Manejador para enviar el formulario de creación (POST)
-  async function onCreate(e: React.FormEvent) {
-    e.preventDefault();
-    
-    await createMut.mutateAsync({
-      title,
-      description: description || undefined,
-      price: Number(price),
-      unit,
-      stock: Number(stock),
-      location,
-      category,
-      producerId: simulatedProducerId, // Inyecta el creador según la sesión simulada
-    });
-
-    // Limpiamos los campos esenciales tras la inserción exitosa
-    setTitle("");
-    setDescription("");
-    setPrice("");
-    setStock("");
+  function openCreate() {
+    setEditingProduct(null);
+    setForm(EMPTY_FORM);
+    setFormError(null);
+    setModalOpen(true);
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 p-4 font-sans">
-      
-      {/* Encabezado */}
-      <div className="mb-6 flex flex-col justify-between gap-4 rounded-2xl bg-gradient-to-r from-green-600 to-emerald-700 p-6 text-white shadow-sm sm:flex-row sm:items-center">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Cadena Justa — Catálogo</h1>
-          <p className="mt-1 text-sm text-green-100">Gestión de productos agrícolas y pesqueros con caché optimizado</p>
-        </div>
-        <button
-          onClick={() => refetch()}
-          className="rounded-lg bg-emerald-800 px-4 py-2 text-sm font-bold border border-emerald-500 shadow-sm hover:bg-emerald-900 transition-all"
-        >
-          🔄 Sincronizar Catálogo
-        </button>
-      </div>
+  function openEdit(p: Product) {
+    setEditingProduct(p);
+    setForm({
+      title: p.title,
+      description: p.description ?? "",
+      price: p.price,
+      unit: p.unit,
+      stock: p.stock,
+      location: p.location,
+      category: p.category,
+      imageUrl: p.imageUrl ?? "",
+    });
+    setFormError(null);
+    setModalOpen(true);
+  }
 
-      {/* Selector de Usuario para pruebas locales */}
-      <div className="mb-6 rounded-xl bg-slate-100 p-3 border border-slate-200 max-w-xs text-xs sm:text-sm">
-        <label className="block text-gray-600 font-semibold mb-1">ID Productor Activo (Sesión):</label>
-        <input 
-          type="number" 
-          value={simulatedProducerId} 
-          onChange={(e) => setSimulatedProducerId(Number(e.target.value))} 
-          className="w-full rounded border bg-white p-1.5 font-bold focus:outline-slate-500"
+  function closeModal() {
+    setModalOpen(false);
+    setEditingProduct(null);
+    setFormError(null);
+  }
+
+  function setField<K extends keyof CreateProductDto>(key: K, val: CreateProductDto[K]) {
+    setForm((prev) => ({ ...prev, [key]: val }));
+  }
+
+  function validate(): string | null {
+    if (!form.title.trim()) return "El título es obligatorio.";
+    if (form.price < 0) return "El precio no puede ser negativo.";
+    if (!form.unit.trim()) return "La unidad de medida es obligatoria.";
+    if (form.stock < 0) return "El stock no puede ser negativo.";
+    if (!form.location.trim()) return "La ubicación es obligatoria.";
+    return null;
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const validationError = validate();
+    if (validationError) { setFormError(validationError); return; }
+    setFormError(null);
+
+    // Limpia campos opcionales vacíos
+    const payload: CreateProductDto = {
+      ...form,
+      description: form.description || undefined,
+      imageUrl: form.imageUrl || undefined,
+    };
+
+    try {
+      if (editingProduct) {
+        const dto: UpdateProductDto = payload;
+        await updateMut.mutateAsync({ id: editingProduct.id, dto });
+      } else {
+        await createMut.mutateAsync(payload);
+      }
+      closeModal();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      setFormError(
+        msg.includes("403") || msg.toLowerCase().includes("forbidden")
+          ? "No tienes permisos para realizar esta acción."
+          : "Error al guardar el producto. Intenta de nuevo."
+      );
+    }
+  }
+
+  async function handleDelete(p: Product) {
+    if (!confirm(`¿Seguro que deseas eliminar "${p.title}"?`)) return;
+    try {
+      await deleteMut.mutateAsync(p.id);
+    } catch {
+      alert("Error al eliminar el producto.");
+    }
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+return (
+  <div className="space-y-6">
+
+    {/* Encabezado */}
+    <div className="flex items-start justify-between gap-4 pb-2 border-b border-emerald-100">
+      <div>
+        <h1 className="text-3xl font-bold text-emerald-800">Productos</h1>
+        <p className="text-slate-500 text-sm mt-1">
+          {isProducer
+            ? "Administra y publica tus productos agropecuarios y pesqueros."
+            : "Encuentra productos frescos directamente de productores y pescadores."}
+        </p>
+      </div>
+      {isProducer && (
+        <button
+          onClick={openCreate}
+          className="shrink-0 flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white font-medium hover:bg-emerald-700 transition-colors"
+        >
+          <i className="ti ti-plus text-[15px]" />
+          Nuevo producto
+        </button>
+      )}
+    </div>
+
+    {/* Filtros */}
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="sm:col-span-2 lg:col-span-1">
+        <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+          Buscar
+        </label>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Título o descripción…"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        
-        {/* COLUMNA 1: Formulario de Publicación (Create) */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm h-fit">
-          <h2 className="text-lg font-bold text-gray-900 mb-1">Publicar Cosecha / Pesca</h2>
-          <p className="text-xs text-gray-500 mb-4">Los datos ingresados se guardan y actualizan masivamente el catálogo.</p>
+      <div>
+        <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+          Categoría
+        </label>
+        <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value as Category | "")}
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white"
+        >
+          <option value="">Todas</option>
+          {CATEGORIES.map((c) => (
+            <option key={c.value} value={c.value}>{c.label}</option>
+          ))}
+        </select>
+      </div>
 
-          <form onSubmit={onCreate} className="space-y-3.5">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Título del Producto</label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Ej: Camarón Tití Fresco, Papa Única"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
-                required
-              />
-            </div>
+      <div>
+        <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+          Ubicación
+        </label>
+        <input
+          type="text"
+          value={locationFilter}
+          onChange={(e) => setLocationFilter(e.target.value)}
+          placeholder="Ciudad o municipio…"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+        />
+      </div>
 
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Descripción</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Detalles del producto, empaque, etc."
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 h-16 resize-none"
-              />
-            </div>
+      <div>
+        <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+          Precio mínimo
+        </label>
+        <input
+          type="number"
+          value={minPrice}
+          onChange={(e) => setMinPrice(e.target.value)}
+          placeholder="0"
+          min={0}
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+        />
+      </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Precio por unidad</label>
-                <input
-                  type="number"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  placeholder="Ej: 5000"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:outline-none"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Unidad Medida</label>
-                <select
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:outline-none bg-white"
-                >
-                  <option value="KG">Kilogramo (KG)</option>
-                  <option value="Libra">Libra</option>
-                  <option value="Bulto">Bulto</option>
-                  <option value="Tonelada">Tonelada</option>
-                </select>
-              </div>
-            </div>
+      <div>
+        <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+          Precio máximo
+        </label>
+        <input
+          type="number"
+          value={maxPrice}
+          onChange={(e) => setMaxPrice(e.target.value)}
+          placeholder="Sin límite"
+          min={0}
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+        />
+      </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Stock Disponible</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={stock}
-                  onChange={(e) => setStock(e.target.value)}
-                  placeholder="Ej: 45.5"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:outline-none"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Categoría</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as Category)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:outline-none bg-white"
-                >
-                  <option value="AGROPECUARIO">🌾 Agropecuario</option>
-                  <option value="PESQUERO">🐟 Pesquero</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Ubicación de Recogida</label>
-              <input
-                type="text"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="Ej: Plaza Central, Finca La Esperanza"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-green-500 focus:outline-none"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={createMut.isPending}
-              className="w-full rounded-lg bg-green-600 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-green-700 transition-all disabled:bg-green-400"
-            >
-              {createMut.isPending ? "Publicando..." : "🚀 Publicar Producto"}
-            </button>
-
-            {createMut.isError && (
-              <p className="text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-100">
-                ❌ Error al publicar: {String(createMut.error)}
-              </p>
-            )}
-          </form>
-        </div>
-
-        {/* COLUMNA 2-3: Listado de Catálogo (List + Delete) */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-bold text-gray-500">
-              {isLoading ? "Buscando datos..." : `${products.length} producto(s) en oferta`}
-            </span>
-          </div>
-
-          {/* Estado de carga general */}
-          {isLoading && <p className="text-center text-gray-600 font-medium py-10">🌾 Cargando catálogo en tiempo real...</p>}
-          {isError && <p className="rounded-xl bg-red-50 p-4 text-sm text-red-600 border border-red-100">⚠️ Error de conexión: {String(error)}</p>}
-
-          {/* Listado en Tarjetas Responsivas */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {products.map((p) => (
-              <div key={p.id} className="overflow-hidden rounded-xl border border-gray-200 bg-white p-4 shadow-sm flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                      p.category === 'PESQUERO' ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-amber-50 text-amber-700 border border-amber-100'
-                    }`}>
-                      {p.category}
-                    </span>
-                    <span className="text-xs text-gray-400">📍 {p.location}</span>
-                  </div>
-                  <h3 className="text-base font-bold text-gray-900 line-clamp-1">{p.title}</h3>
-                  <p className="mt-1 text-xs text-gray-500 line-clamp-2">{p.description ?? "Sin descripción."}</p>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-gray-100">
-                  <div className="flex items-baseline justify-between mb-3">
-                    <span className="text-xs text-gray-400">Precio por {p.unit}</span>
-                    <span className="text-lg font-black text-green-700">${Number(p.price).toLocaleString()}</span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between gap-2 text-xs text-gray-600 bg-gray-50 p-2 rounded-lg">
-                    <span>Stock: <strong>{p.stock} {p.unit}</strong></span>
-                    
-                    {/* Botón de Borrado Protegido */}
-                    <button
-                      onClick={() => {
-                        if (!confirm(`¿Seguro que deseas eliminar "${p.title}" del catálogo?`)) return;
-                        deleteMut.mutate({ id: p.id, userId: simulatedProducerId });
-                      }}
-                      className="rounded-md bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600 border border-red-100 hover:bg-red-100 transition-all"
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            {!isLoading && !isError && products.length === 0 && (
-              <div className="col-span-full rounded-2xl border border-dashed border-gray-300 p-10 text-center bg-white">
-                <p className="text-gray-500 text-sm">El catálogo está vacío. ¡Publica el primer producto usando el formulario de la izquierda!</p>
-              </div>
-            )}
-          </div>
-
-          {deleteMut.isError && (
-            <p className="rounded-lg bg-red-50 p-3 text-xs text-red-600 border border-red-100 shadow-sm">
-              🛑 Error al eliminar: {String(deleteMut.error)} (Verifica que el ID Productor Activo sea el dueño real del producto)
-            </p>
-          )}
-        </div>
-
+      <div className="flex items-end">
+        <button
+          onClick={() => {
+            setSearch("");
+            setCategoryFilter("");
+            setLocationFilter("");
+            setMinPrice("");
+            setMaxPrice("");
+          }}
+          className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-500 hover:bg-slate-50 transition-colors"
+        >
+          <i className="ti ti-x text-[14px]" />
+          Limpiar filtros
+        </button>
       </div>
     </div>
-  );
+
+    {/* Estados de carga / error */}
+    {isLoading && (
+      <p className="text-sm text-emerald-600 animate-pulse">Cargando productos…</p>
+    )}
+    {isError && (
+      <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700 flex items-center gap-2">
+        <i className="ti ti-alert-circle text-[16px]" />
+        Error al cargar productos: {String(error)}
+      </div>
+    )}
+
+    {/* Grilla de productos */}
+    {!isLoading && !isError && (
+      <>
+        <p className="text-sm text-slate-400">
+          {products.length} producto(s) encontrado(s)
+        </p>
+
+        {products.length === 0 ? (
+          <div className="bg-white rounded-xl border border-slate-200 p-10 flex flex-col items-center gap-2 text-slate-400">
+            <i className="ti ti-mood-empty text-[36px]" />
+            <p className="text-sm">No hay productos que coincidan con los filtros.</p>
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {products.map((p) => {
+              const isOwner = isProducer && p.producerId === user?.id;
+              return (
+                <div
+                  key={p.id}
+                  className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden hover:shadow-md transition-shadow"
+                >
+                  {/* Imagen o placeholder */}
+                  {p.imageUrl ? (
+                    <img
+                      src={p.imageUrl}
+                      alt={p.title}
+                      className="h-40 w-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-40 w-full bg-emerald-50 flex flex-col items-center justify-center gap-1 text-emerald-300">
+                      <i className="ti ti-photo-off text-[28px]" />
+                      <span className="text-xs">Sin imagen</span>
+                    </div>
+                  )}
+
+                  <div className="p-4 flex flex-col gap-2 flex-1">
+                    {/* Badge categoría */}
+                    <span
+                      className={`self-start rounded-full px-2.5 py-0.5 text-xs font-medium flex items-center gap-1 ${
+                        p.category === "PESQUERO"
+                          ? "bg-blue-50 text-blue-700"
+                          : "bg-emerald-50 text-emerald-700"
+                      }`}
+                    >
+                      <i className={`ti ${p.category === "PESQUERO" ? "ti-fish" : "ti-plant"} text-[12px]`} />
+                      {p.category === "PESQUERO" ? "Pesquero" : "Agropecuario"}
+                    </span>
+
+                    <h3 className="font-semibold text-slate-800 leading-tight">
+                      {p.title}
+                    </h3>
+
+                    {p.description && (
+                      <p className="text-xs text-slate-500 line-clamp-2">
+                        {p.description}
+                      </p>
+                    )}
+
+                    <div className="mt-auto pt-2 border-t border-slate-100 space-y-1.5 text-sm">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-400 flex items-center gap-1">
+                          <i className="ti ti-currency-dollar text-[13px]" />Precio
+                        </span>
+                        <span className="font-semibold text-emerald-700">
+                          ${p.price.toLocaleString("es-CO")} / {p.unit}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-400 flex items-center gap-1">
+                          <i className="ti ti-stack text-[13px]" />Stock
+                        </span>
+                        <span className="text-slate-700">{p.stock} {p.unit}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-400 flex items-center gap-1">
+                          <i className="ti ti-map-pin text-[13px]" />Ubicación
+                        </span>
+                        <span className="text-slate-700 text-right">{p.location}</span>
+                      </div>
+                    </div>
+
+                    {/* Datos del productor — visible solo para BUYER */}
+                    {!isProducer && (
+                      <div className="mt-2 rounded-lg bg-emerald-50 border border-emerald-100 p-2 text-xs text-slate-600 space-y-0.5">
+                        <p>
+                          <span className="font-medium">Productor:</span>{" "}
+                          {p.producer.fullName}
+                          {p.producer.isVerified && (
+                            <span className="ml-1 text-emerald-600">
+                              <i className="ti ti-circle-check text-[12px]" />
+                            </span>
+                          )}
+                        </p>
+                        <p>
+                          <span className="font-medium">Contacto:</span>{" "}
+                          {p.producer.phone}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Acciones — solo si es el dueño PRODUCER */}
+                    {isOwner && (
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          onClick={() => openEdit(p)}
+                          className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 transition-colors"
+                        >
+                          <i className="ti ti-edit text-[13px]" />
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => handleDelete(p)}
+                          disabled={deleteMut.isPending}
+                          className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                        >
+                          <i className="ti ti-trash text-[13px]" />
+                          Eliminar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </>
+    )}
+
+    {/* Modal crear / editar */}
+    {modalOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-base font-semibold text-emerald-900 flex items-center gap-2">
+              <i className={`ti ${editingProduct ? "ti-edit" : "ti-plus"} text-[16px] text-emerald-600`} />
+              {editingProduct ? "Editar producto" : "Nuevo producto"}
+            </h2>
+            <button
+              onClick={closeModal}
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+            >
+              <i className="ti ti-x text-[16px]" />
+            </button>
+          </div>
+
+          {formError && (
+            <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700 flex items-center gap-2">
+              <i className="ti ti-alert-circle text-[15px]" />
+              {formError}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                Título *
+              </label>
+              <input
+                type="text"
+                value={form.title}
+                onChange={(e) => setField("title", e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                disabled={createMut.isPending || updateMut.isPending}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                Descripción{" "}
+                <span className="text-slate-400 normal-case font-normal">(opcional)</span>
+              </label>
+              <textarea
+                value={form.description}
+                onChange={(e) => setField("description", e.target.value)}
+                rows={2}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 resize-none"
+                disabled={createMut.isPending || updateMut.isPending}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                  Precio *
+                </label>
+                <input
+                  type="number"
+                  value={form.price}
+                  onChange={(e) => setField("price", Number(e.target.value))}
+                  min={0}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  disabled={createMut.isPending || updateMut.isPending}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                  Unidad *
+                </label>
+                <input
+                  type="text"
+                  value={form.unit}
+                  onChange={(e) => setField("unit", e.target.value)}
+                  placeholder="KG, Bulto…"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  disabled={createMut.isPending || updateMut.isPending}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                  Stock *
+                </label>
+                <input
+                  type="number"
+                  value={form.stock}
+                  onChange={(e) => setField("stock", Number(e.target.value))}
+                  min={0}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  disabled={createMut.isPending || updateMut.isPending}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                  Categoría *
+                </label>
+                <select
+                  value={form.category}
+                  onChange={(e) => setField("category", e.target.value as Category)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white"
+                  disabled={createMut.isPending || updateMut.isPending}
+                >
+                  {CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                Ubicación de recogida *
+              </label>
+              <input
+                type="text"
+                value={form.location}
+                onChange={(e) => setField("location", e.target.value)}
+                placeholder="Ej: Tumaco, Nariño"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                disabled={createMut.isPending || updateMut.isPending}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                URL de imagen{" "}
+                <span className="text-slate-400 normal-case font-normal">(opcional)</span>
+              </label>
+              <input
+                type="url"
+                value={form.imageUrl}
+                onChange={(e) => setField("imageUrl", e.target.value)}
+                placeholder="https://..."
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                disabled={createMut.isPending || updateMut.isPending}
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="submit"
+                disabled={createMut.isPending || updateMut.isPending}
+                className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-emerald-600 py-2 text-sm text-white font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+              >
+                <i className="ti ti-device-floppy text-[15px]" />
+                {createMut.isPending || updateMut.isPending
+                  ? "Guardando…"
+                  : editingProduct
+                  ? "Guardar cambios"
+                  : "Crear producto"}
+              </button>
+              <button
+                type="button"
+                onClick={closeModal}
+                disabled={createMut.isPending || updateMut.isPending}
+                className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-slate-200 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                <i className="ti ti-x text-[15px]" />
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
+  </div>
+);
 }

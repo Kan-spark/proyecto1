@@ -1,107 +1,115 @@
-import { useState } from 'react';
+import { Profiler, useState } from "react";
+import "./App.css";
+
+import MainLayout from "./layouts/MainLayout";
+import SidebarMenu from "./components/SidebarMenu";
+
 import ProductsPage from "./pages/ProductsPage";
 import OrdersPage from "./pages/OrdersPage";
-import UsersPage from "./pages/UsersPage";
 import ReviewsPage from "./pages/ReviewsPage";
+import ProfilePage from "./pages/UsersPage";
 
-// Definimos los identificadores de nuestras páginas
-type ActivePage = 'products' | 'orders' | 'users' | 'reviews';
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
 
-function App() {
-  const [currentPage, setCurrentPage] = useState<ActivePage>('products');
+import { useAuth } from "./context/AuthContext";
 
-  // Función auxiliar para renderizar la página seleccionada
-  const renderPage = () => {
-    switch (currentPage) {
-      case 'products':
+export default function App() {
+  const { user, logout } = useAuth();
+
+  const [page, setPage] = useState("products");
+
+  // Solo se usa cuando NO hay sesión
+  const [authScreen, setAuthScreen] = useState<
+    "login" | "register"
+  >("login");
+
+  // ─────────────────────────────────────────────
+  // SI NO HAY SESIÓN
+  // ─────────────────────────────────────────────
+
+  if (!user) {
+    if (authScreen === "register") {
+      return (
+        <RegisterPage
+          onSuccess={() =>
+            setAuthScreen("login")
+          }
+          onGoLogin={() =>
+            setAuthScreen("login")
+          }
+        />
+      );
+    }
+
+    return (
+      <LoginPage
+        onSuccess={() => {}}
+        onGoRegister={() =>
+          setAuthScreen("register")
+        }
+      />
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // APP AUTENTICADA
+  // ─────────────────────────────────────────────
+
+  function renderContent() {
+    switch (page) {
+      case "products":
         return <ProductsPage />;
-      case 'orders':
+
+      case "users":
+        return <ProfilePage />;
+
+
+      case "orders":
         return <OrdersPage />;
-      case 'users':
-        return <UsersPage />;
-      case 'reviews':
+
+      case "reviews":
         return <ReviewsPage />;
+
       default:
         return <ProductsPage />;
     }
-  };
+  }
 
-  return (
-    <div className="min-h-screen bg-gray-100 flex flex-col font-sans">
-      {/* Barra de Navegación Principal (Diseño Móvil-Primero) */}
-      <header className="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between gap-4">
-            
-            {/* Logo de la aplicación */}
-            <div className="flex flex-shrink-0 items-center">
-              <span className="text-xl font-black tracking-tight text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-xl">
-                🌾 Cadena Justa
-              </span>
-            </div>
+  const sidebar = (
+    <div>
+      <SidebarMenu
+        current={page}
+        onChange={setPage}
+      />
 
-            {/* Menú de pestañas adaptado para pantallas táctiles */}
-            <nav className="flex space-x-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-none max-w-full">
-              <button
-                onClick={() => setCurrentPage('products')}
-                className={`rounded-lg px-3 py-2 text-xs sm:text-sm font-bold tracking-wide transition-all whitespace-nowrap ${
-                  currentPage === 'products'
-                    ? 'bg-green-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-              >
-                🛒 Catálogo
-              </button>
+      <div className="mt-6 border-t pt-4">
+        <p className="text-sm font-semibold text-slate-700">
+          {user.fullName}
+        </p>
 
-              <button
-                onClick={() => setCurrentPage('orders')}
-                className={`rounded-lg px-3 py-2 text-xs sm:text-sm font-bold tracking-wide transition-all whitespace-nowrap ${
-                  currentPage === 'orders'
-                    ? 'bg-slate-700 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-              >
-                📦 Pedidos
-              </button>
+        <p className="text-xs text-slate-500">
+          {user.email}
+        </p>
 
-              <button
-                onClick={() => setCurrentPage('users')}
-                className={`rounded-lg px-3 py-2 text-xs sm:text-sm font-bold tracking-wide transition-all whitespace-nowrap ${
-                  currentPage === 'users'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-              >
-                👥 Usuarios
-              </button>
+        <p className="text-xs text-slate-500 mt-1">
+          Rol: {user.role}
+        </p>
 
-              <button
-                onClick={() => setCurrentPage('reviews')}
-                className={`rounded-lg px-3 py-2 text-xs sm:text-sm font-bold tracking-wide transition-all whitespace-nowrap ${
-                  currentPage === 'reviews'
-                    ? 'bg-amber-500 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-              >
-                ⭐ Reseñas
-              </button>
-            </nav>
-
-          </div>
-        </div>
-      </header>
-
-      {/* Contenedor del Contenido Dinámico */}
-      <main className="flex-1 mx-auto w-full max-w-7xl">
-        {renderPage()}
-      </main>
-
-      {/* Footer Minimalista */}
-      <footer className="bg-white border-t border-gray-200 py-3 text-center text-xs text-gray-400">
-        &copy; {new Date().getFullYear()} Cadena Justa. Interfaz optimizada para el comercio directo.
-      </footer>
+        <button
+          onClick={logout}
+          className="mt-4 w-full rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
+        >
+          Cerrar sesión
+        </button>
+      </div>
     </div>
   );
-}
 
-export default App;
+  return (
+    <MainLayout
+      sidebar={sidebar}
+      content={renderContent()}
+    />
+  );
+}

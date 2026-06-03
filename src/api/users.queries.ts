@@ -1,63 +1,31 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { http } from "./http";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { usersApi, type UpdateUserDto } from "./users";
 
-export interface User {
-  id: number;
-  email: string;
-  fullName: string;
-  phone?: string;
-  role: "PRODUCER" | "BUYER";
-  createdAt?: string;
-}
+// ── Keys ─────────────────────────────────────────────────────────────────────
 
-export const usersApi = {
-  // GET /users
-  getAll: () => http<User[]>("/users", { method: "GET" }),
-  
-  // GET /users/:id
-  getOne: (id: number) => http<User>(`/users/${id}`, { method: "GET" }),
-  
-  // POST /users/register (Solo campos estrictos del CreateUserDto)
-  create: (dto: { email: string; fullName: string; phone: string; role: "PRODUCER" | "BUYER"; password?: string }) => {
-    return http<User>("/users/register", {
-      method: "POST",
-      body: JSON.stringify(dto),
-    });
-  },
-  
-  // PATCH /users/:id (Solo campos estrictos del UpdateUserDto)
-  update: (id: number, dto: { fullName: string; phone: string; role?: "PRODUCER" | "BUYER" }) => {
-    return http<User>(`/users/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(dto),
-    });
-  },
+const keys = {
+  me: ["users", "me"] as const,
 };
 
-// --- HOOKS ---
-export function useAllUsers() {
+// ── Queries ──────────────────────────────────────────────────────────────────
+
+/** Obtiene el perfil del usuario autenticado (GET /users/me) */
+function useMyProfile() {
   return useQuery({
-    queryKey: ["users", "list"],
-    queryFn: usersApi.getAll,
+    queryKey: keys.me,
+    queryFn: usersApi.getMe,
   });
 }
 
-export function useCreateUser() {
-  const queryClient = useQueryClient();
+// ── Mutations ────────────────────────────────────────────────────────────────
+
+/** Actualiza el perfil del usuario autenticado (PATCH /users/me) */
+function useUpdateMyProfile() {
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: usersApi.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users", "list"] });
-    },
+    mutationFn: (dto: UpdateUserDto) => usersApi.updateMe(dto),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.me }),
   });
 }
 
-export function useUpdateUser() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, dto }: { id: number; dto: any }) => usersApi.update(id, dto),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users", "list"] });
-    },
-  });
-}
+export { useMyProfile, useUpdateMyProfile };

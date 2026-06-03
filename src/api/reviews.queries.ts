@@ -1,29 +1,34 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { reviewsApi } from "./reviews";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { reviewsApi, type CreateReviewDto } from "./reviews";
+
+// ── Keys ─────────────────────────────────────────────────────────────────────
 
 const keys = {
-  producer: (producerId: number) => ["reviews", "producer", producerId] as const,
+  all: ["reviews"] as const,
+  byProducer: (producerId: number) => ["reviews", "producer", producerId] as const,
 };
 
-export function useProducerReviews(producerId: number) {
+// ── Queries ──────────────────────────────────────────────────────────────────
+
+/** GET /reviews/producer/:id — reseñas de un productor */
+function useProducerReviews(producerId: number) {
   return useQuery({
-    queryKey: keys.producer(producerId),
-    queryFn: () => reviewsApi.getByProducer(producerId),
-    // Evita que falle si al inicio pasas un ID inválido o en cero
-    enabled: producerId > 0, 
+    queryKey: keys.byProducer(producerId),
+    queryFn: () => reviewsApi.findByProducer(producerId),
+    enabled: producerId > 0,
   });
 }
 
-export function useCreateReview(producerIdToRefresh: number) {
-  const queryClient = useQueryClient();
+// ── Mutations ────────────────────────────────────────────────────────────────
 
+/** POST /reviews — solo BUYER */
+function useCreateReview() {
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: (dto: { orderId: number; authorId: number; rating: number; comment?: string }) => {
-      return reviewsApi.create(dto);
-    },
-    onSuccess: () => {
-      // Sincroniza en caliente la lista de reputación del productor seleccionado
-      queryClient.invalidateQueries({ queryKey: keys.producer(producerIdToRefresh) });
-    },
+    mutationFn: (dto: CreateReviewDto) => reviewsApi.create(dto),
+    // Invalida reseñas del productor y el historial de pedidos
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.all }),
   });
 }
+
+export { useProducerReviews, useCreateReview };

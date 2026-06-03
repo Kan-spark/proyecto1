@@ -1,314 +1,446 @@
 import { useState } from "react";
-import { useUserOrders, useCreateOrder, useUpdateOrderStatus } from "../api/orders.queries";
-import type { OrderStatus } from "../api/orders";
+import { useAuth } from "../context/AuthContext";
+import { useMyOrders, useCreateOrder, useUpdateOrderStatus } from "../api/orders.queries";
+import { useProducts } from "../api/products.queries";
+import type { OrderStatus, CreateOrderItemDto } from "../api/orders";
+import type { Category } from "../api/products";
 
-// Definimos un tipo local para los ítems que están en el carrito temporal
-interface CartItem {
-  productId: number;
-  quantity: number;
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const STATUS_LABEL: Record<OrderStatus, string> = {
+  PENDING: "Pendiente",
+  CONFIRMED: "Confirmado",
+  DELIVERED: "Entregado",
+  CANCELLED: "Cancelado",
+};
+
+const STATUS_STYLE: Record<OrderStatus, string> = {
+  PENDING: "bg-amber-100 text-amber-700",
+  CONFIRMED: "bg-blue-100 text-blue-700",
+  DELIVERED: "bg-green-100 text-green-700",
+  CANCELLED: "bg-red-100 text-red-700",
+};
+
+// Qué estados puede asignar un PRODUCER
+const PRODUCER_NEXT_STATUSES: Partial<Record<OrderStatus, OrderStatus[]>> = {
+  PENDING: ["CONFIRMED", "CANCELLED"],
+  CONFIRMED: ["DELIVERED", "CANCELLED"],
+};
+
+// ── Componente principal ──────────────────────────────────────────────────────
 
 export default function OrdersPage() {
-  // Estados para simular la sesión del usuario en pruebas locales
-  const [simulatedUserId, setSimulatedUserId] = useState<number>(2);
-  const [simulatedRole, setSimulatedRole] = useState<"BUYER" | "PRODUCER">("BUYER");
+  const { user } = useAuth();
+  const isProducer = user?.role === "PRODUCER";
 
-  // Estados para el producto que se está intentando añadir al carrito
-  const [productId, setProductId] = useState("");
-  const [quantity, setQuantity] = useState("");
-
-  // ESTADO DEL CARRITO LOCAL (Soporta múltiples productos antes de enviar)
-  const [cart, setCart] = useState<CartItem[]>([]);
-
-  // TanStack Query Hooks
-  const { data: orders = [], isLoading, isError, error, refetch } = useUserOrders(simulatedUserId, simulatedRole);
-  const createOrderMut = useCreateOrder();
+  const { data: orders = [], isLoading, isError, error } = useMyOrders(
+    isProducer ? "PRODUCER" : "BUYER"
+  );
   const updateStatusMut = useUpdateOrderStatus();
+  const createOrderMut = useCreateOrder();
 
-  // Agregar un producto al carrito temporal de la pantalla
-  function handleAddToCar(e: React.FormEvent) {
-    e.preventDefault();
-    if (!productId || !quantity) return;
+  // ── Estado del modal de nuevo pedido (solo BUYER) ─────────────────────────
+  const [cartOpen, setCartOpen] = useState(false);
+  const [cart, setCart] = useState<CreateOrderItemDto[]>([]);
+  const [cartError, setCartError] = useState<string | null>(null);
 
-    const newItem: CartItem = {
-      productId: Number(productId),
-      quantity: Number(quantity),
-    };
+  // Para seleccionar productos desde el catálogo
+  const { data: products = [] } = useProducts();
+  const [productSearch, setProductSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<Category | "">("");
 
-    // Si el producto ya existe en el carrito, sumamos la cantidad, si no, lo agregamos
-    const existingIndex = cart.findIndex((item) => item.productId === newItem.productId);
-    if (existingIndex > -1) {
-      const updatedCart = [...cart];
-      updatedCart[existingIndex].quantity += newItem.quantity;
-      setCart(updatedCart);
+  const filteredProducts = products.filter((p) => {
+    const matchSearch = p.title.toLowerCase().includes(productSearch.toLowerCase());
+    const matchCat = categoryFilter ? p.category === categoryFilter : true;
+    return matchSearch && matchCat;
+  });
+
+  function getCartQty(productId: number): number {
+    return cart.find((i) => i.productId === productId)?.quantity ?? 0;
+  }
+
+  function setCartItem(productId: number, quantity: number) {
+    if (quantity <= 0) {
+      setCart((prev) => prev.filter((i) => i.productId !== productId));
     } else {
-      setCart([...cart, newItem]);
+      setCart((prev) => {
+        const exists = prev.find((i) => i.productId === productId);
+        if (exists) return prev.map((i) => i.productId === productId ? { ...i, quantity } : i);
+        return [...prev, { productId, quantity }];
+      });
     }
-
-    // Limpiamos solo los inputs para que pueda agregar otro producto
-    setProductId("");
-    setQuantity("");
   }
 
-  // Quitar un ítem del carrito por si el usuario se equivocó
-  function handleRemoveFromCart(index: number) {
-    setCart(cart.filter((_, i) => i !== index));
-  }
-
-  // Enviar TODO el carrito al backend (POST)
-  async function onCreateOrder() {
-    if (cart.length === 0) return;
-
-    await createOrderMut.mutateAsync({
-      buyerId: simulatedUserId,
-      items: cart, // <- Aquí enviamos el arreglo con todos los productos juntos
-    });
-
-    // Vaciamos el carrito tras la compra exitosa
+  function openCart() {
     setCart([]);
+    setCartError(null);
+    setProductSearch("");
+    setCategoryFilter("");
+    setCartOpen(true);
   }
 
-  // Cambiar estado de la orden (PATCH)
-  async function onUpdateStatus(orderId: number, nextStatus: OrderStatus) {
-    await updateStatusMut.mutateAsync({
-      id: orderId,
-      status: nextStatus,
-    });
-  }
-
-  const getStatusStyles = (status: string) => {
-    switch (status) {
-      case "PENDING": return "bg-amber-100 text-amber-800 border-amber-200";
-      case "CONFIRMED": return "bg-blue-100 text-blue-800 border-blue-200";
-      case "DELIVERED": return "bg-green-100 text-green-800 border-green-200";
-      default: return "bg-red-100 text-red-800 border-red-200";
+  async function handleCreateOrder() {
+    if (cart.length === 0) {
+      setCartError("Agrega al menos un producto al pedido.");
+      return;
     }
-  };
+    setCartError(null);
+    try {
+      await createOrderMut.mutateAsync({ items: cart });
+      setCartOpen(false);
+      setCart([]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      // El backend devuelve el mensaje de stock insuficiente en el body
+      setCartError(msg || "Error al crear el pedido. Intenta de nuevo.");
+    }
+  }
 
-  return (
-    <div className="min-h-screen bg-gray-50 p-4 font-sans">
-      
-      {/* Encabezado */}
-      <div className="mb-6 flex flex-col justify-between gap-4 rounded-2xl bg-gradient-to-r from-slate-700 to-slate-900 p-6 text-white shadow-sm sm:flex-row sm:items-center">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Cadena Justa — Transacciones</h1>
-          <p className="mt-1 text-sm text-slate-300">Historial contractual y flujos de confirmación claros</p>
-        </div>
+  // ── Cambio de estado (PRODUCER) ───────────────────────────────────────────
+  async function handleStatusChange(orderId: number, status: OrderStatus) {
+    try {
+      await updateStatusMut.mutateAsync({ id: orderId, dto: { status } });
+    } catch {
+      alert("Error al actualizar el estado.");
+    }
+  }
+
+  // ── BUYER: cancela su propio pedido PENDING ───────────────────────────────
+  async function handleCancel(orderId: number) {
+    if (!confirm("¿Seguro que deseas cancelar este pedido?")) return;
+    try {
+      await updateStatusMut.mutateAsync({ id: orderId, dto: { status: "CANCELLED" } });
+    } catch {
+      alert("Error al cancelar el pedido.");
+    }
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+return (
+  <div className="space-y-6">
+
+    {/* Encabezado */}
+    <div className="flex items-start justify-between gap-4 pb-2 border-b border-emerald-100">
+      <div>
+        <h1 className="text-3xl font-bold text-emerald-800">Pedidos</h1>
+        <p className="text-slate-500 text-sm mt-1">
+          {isProducer
+            ? "Pedidos que contienen tus productos."
+            : "Historial de tus compras."}
+        </p>
+      </div>
+      {!isProducer && (
         <button
-          onClick={() => refetch()}
-          className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-bold border border-slate-600 shadow-sm hover:bg-slate-800/50 transition-all"
+          onClick={openCart}
+          className="shrink-0 flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white font-medium hover:bg-emerald-700 transition-colors"
         >
-          🔄 Sincronizar Pedidos
+          <i className="ti ti-shopping-cart-plus text-[15px]" />
+          Nuevo pedido
         </button>
-      </div>
+      )}
+    </div>
 
-      {/* Panel de Simulación de Sesión Activa */}
-      <div className="mb-6 grid grid-cols-1 gap-4 rounded-xl bg-slate-100 p-4 border border-slate-200 sm:grid-cols-2">
-        <div>
-          <label className="block text-xs font-bold text-gray-600 uppercase mb-1">ID Usuario en Sesión:</label>
-          <input 
-            type="number" 
-            value={simulatedUserId} 
-            onChange={(e) => setSimulatedUserId(Number(e.target.value))} 
-            className="w-full rounded-lg border bg-white p-2 text-sm font-bold focus:outline-none"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-gray-600 uppercase mb-1">Ver Panel Como:</label>
-          <select 
-            value={simulatedRole} 
-            onChange={(e) => setSimulatedRole(e.target.value as "BUYER" | "PRODUCER")}
-            className="w-full rounded-lg border bg-white p-2 text-sm font-bold focus:outline-none bg-white"
-          >
-            <option value="BUYER">🛒 Comprador (Mis Compras)</option>
-            <option value="PRODUCER">🚜 Productor (Mis Ventas)</option>
-          </select>
-        </div>
+    {/* Estados de carga / error */}
+    {isLoading && (
+      <p className="text-sm text-emerald-600 animate-pulse">Cargando pedidos…</p>
+    )}
+    {isError && (
+      <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700 flex items-center gap-2">
+        <i className="ti ti-alert-circle text-[16px]" />
+        Error al cargar pedidos: {String(error)}
       </div>
+    )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        
-        {/* COLUMNA 1: Carrito Multi-Producto */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm h-fit space-y-5">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-1">Generar Nuevo Pedido</h2>
-            <p className="text-xs text-gray-500">Agrega múltiples productos a tu orden antes de procesarla.</p>
+    {/* Lista de pedidos */}
+    {!isLoading && !isError && (
+      <>
+        <p className="text-sm text-slate-400">{orders.length} pedido(s) encontrado(s)</p>
+
+        {orders.length === 0 ? (
+          <div className="bg-white rounded-xl border border-slate-200 p-10 flex flex-col items-center gap-2 text-slate-400">
+            <i className="ti ti-clipboard-off text-[36px]" />
+            <p className="text-sm">
+              {isProducer
+                ? "Aún no hay pedidos para tus productos."
+                : "No has realizado ningún pedido todavía."}
+            </p>
           </div>
+        ) : (
+          <div className="space-y-4">
+            {orders.map((order) => {
+              const nextStatuses = isProducer
+                ? PRODUCER_NEXT_STATUSES[order.status] ?? []
+                : [];
+              const canBuyerCancel = !isProducer && order.status === "PENDING";
 
-          {simulatedRole === "BUYER" ? (
-            <>
-              {/* Formulario para añadir al Carrito */}
-              <form onSubmit={handleAddToCar} className="space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <span className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Añadir Ítem</span>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-700 uppercase mb-1">ID Producto</label>
-                    <input
-                      type="number"
-                      value={productId}
-                      onChange={(e) => setProductId(e.target.value)}
-                      placeholder="Ej: 1"
-                      className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs focus:outline-none focus:border-slate-500"
-                      required
-                    />
+              return (
+                <div
+                  key={order.id}
+                  className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden"
+                >
+                  {/* Cabecera del pedido */}
+                  <div className="bg-emerald-50 border-b border-emerald-100 px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-semibold text-emerald-900 flex items-center gap-1.5">
+                        <i className="ti ti-receipt text-[14px] text-emerald-600" />
+                        Pedido #{order.id}
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {new Date(order.createdAt).toLocaleDateString("es-CO", {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                      {isProducer && (
+                        <p className="text-xs text-slate-500 flex items-center gap-1">
+                          <i className="ti ti-user text-[12px]" />
+                          {order.buyer.fullName} · {order.buyer.phone}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS_STYLE[order.status]}`}>
+                        {STATUS_LABEL[order.status]}
+                      </span>
+                      <span className="text-sm font-bold text-emerald-700 bg-white border border-emerald-100 rounded-lg px-3 py-1">
+                        ${order.total.toLocaleString("es-CO")}
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-700 uppercase mb-1">Cantidad</label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={quantity}
-                      onChange={(e) => setQuantity(e.target.value)}
-                      placeholder="Ej: 5"
-                      className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs focus:outline-none focus:border-slate-500"
-                      required
-                    />
+
+                  <div className="p-5 space-y-4">
+                    {/* Items del pedido */}
+                    <div className="rounded-lg border border-slate-100 overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-slate-50 text-left">
+                            <th className="p-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Producto</th>
+                            <th className="p-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Cantidad</th>
+                            <th className="p-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Precio unit.</th>
+                            <th className="p-3 text-xs font-medium text-slate-500 uppercase tracking-wide text-right">Subtotal</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {order.items.map((item) => (
+                            <tr key={item.id} className="border-t border-slate-100 hover:bg-emerald-50 transition-colors">
+                              <td className="p-3 font-medium text-slate-700">{item.product.title}</td>
+                              <td className="p-3 text-slate-500">{item.quantity} {item.product.unit}</td>
+                              <td className="p-3 text-slate-500">${item.price.toLocaleString("es-CO")}</td>
+                              <td className="p-3 text-right font-semibold text-emerald-700">
+                                ${(item.price * item.quantity).toLocaleString("es-CO")}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Acciones */}
+                    {(nextStatuses.length > 0 || canBuyerCancel) && (
+                      <div className="flex flex-wrap gap-2">
+                        {nextStatuses.map((s) => (
+                          <button
+                            key={s}
+                            onClick={() => handleStatusChange(order.id, s)}
+                            disabled={updateStatusMut.isPending}
+                            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium border transition-colors disabled:opacity-50 ${
+                              s === "CANCELLED"
+                                ? "border-red-200 text-red-600 hover:bg-red-50"
+                                : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                            }`}
+                          >
+                            <i className={`ti ${s === "CANCELLED" ? "ti-x" : "ti-arrow-right"} text-[13px]`} />
+                            {updateStatusMut.isPending ? "Actualizando…" : `Marcar como ${STATUS_LABEL[s]}`}
+                          </button>
+                        ))}
+
+                        {canBuyerCancel && (
+                          <button
+                            onClick={() => handleCancel(order.id)}
+                            disabled={updateStatusMut.isPending}
+                            className="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                          >
+                            <i className="ti ti-x text-[13px]" />
+                            Cancelar pedido
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <button type="submit" className="w-full text-center text-xs font-bold bg-slate-200 hover:bg-slate-300 py-1.5 rounded-md transition-colors">
-                  ➕ Añadir al Carrito
-                </button>
-              </form>
+              );
+            })}
+          </div>
+        )}
+      </>
+    )}
 
-              {/* Vista del Carrito de Compras Temporal */}
-              <div className="space-y-2">
-                <span className="text-xs font-bold text-gray-700 block">Tu Carrito ({cart.length} ítems):</span>
-                
-                {cart.length === 0 ? (
-                  <p className="text-xs text-gray-400 italic text-center py-4 border border-dashed rounded-xl">El carrito está vacío</p>
-                ) : (
-                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                    {cart.map((item, index) => (
-                      <div key={index} className="flex justify-between items-center text-xs bg-slate-100 p-2 rounded-lg border border-slate-200">
-                        <span>📦 Prod ID: <strong>{item.productId}</strong> — Cant: <strong>{item.quantity}</strong></span>
-                        <button 
-                          onClick={() => handleRemoveFromCart(index)}
-                          className="text-red-500 hover:text-red-700 font-bold px-1"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+    {/* Modal nuevo pedido (BUYER) */}
+    {cartOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
 
-              {/* Botón Final para Emitir Pedido */}
-              <button
-                onClick={onCreateOrder}
-                disabled={cart.length === 0 || createOrderMut.isPending}
-                className="w-full rounded-lg bg-slate-800 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-slate-900 transition-all disabled:bg-slate-300"
-              >
-                {createOrderMut.isPending ? "Procesando Pedido..." : `🛒 Enviar Orden (${cart.length} Productos)`}
-              </button>
-
-              {createOrderMut.isError && (
-                <p className="text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-100">
-                  ❌ Error: {String(createOrderMut.error)} (Verifica IDs o stock disponible)
-                </p>
-              )}
-            </>
-          ) : (
-            <div className="rounded-xl bg-amber-50/50 border border-amber-200 p-4 text-center">
-              <p className="text-sm text-amber-800 font-medium">
-                Panel de Productor activo. Cambia tu rol a "Comprador" arriba si deseas simular y armar un nuevo carrito.
+          {/* Header modal */}
+          <div className="bg-emerald-50 border-b border-emerald-100 px-6 py-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-emerald-900 flex items-center gap-2">
+                <i className="ti ti-shopping-cart text-[16px] text-emerald-600" />
+                Nuevo pedido
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {cart.length === 0
+                  ? "Selecciona productos y cantidades"
+                  : `${cart.length} producto(s) en el pedido`}
               </p>
             </div>
-          )}
-        </div>
-
-        {/* COLUMNA 2-3: Historial Contractual Dinámico */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-bold text-gray-500">
-              {isLoading ? "Buscando transacciones..." : `${orders.length} registro(s) encontrados`}
-            </span>
+            <button
+              onClick={() => setCartOpen(false)}
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-white hover:text-slate-600 transition-colors"
+            >
+              <i className="ti ti-x text-[16px]" />
+            </button>
           </div>
 
-          {isLoading && <p className="text-center text-gray-600 font-medium py-10">📦 Leyendo bloque de órdenes en tiempo real...</p>}
-          {isError && <p className="rounded-xl bg-red-50 p-4 text-sm text-red-600 border border-red-100">⚠️ Error: {String(error)}</p>}
+          {/* Filtros de búsqueda */}
+          <div className="p-4 border-b border-slate-100 grid grid-cols-2 gap-3">
+            <input
+              type="text"
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+              placeholder="Buscar producto…"
+              className="col-span-2 sm:col-span-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value as Category | "")}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white"
+            >
+              <option value="">Todas las categorías</option>
+              <option value="PESQUERO">Pesquero</option>
+              <option value="AGROPECUARIO">Agropecuario</option>
+            </select>
+          </div>
 
-          <div className="space-y-4">
-            {orders.map((o) => (
-              <div key={o.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm flex flex-col justify-between gap-4">
-                
-                {/* Cabecera del pedido */}
-                <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
-                  <div>
-                    <span className="text-sm font-bold text-gray-900">Pedido N° {o.id}</span>
-                    <span className="block text-[10px] text-gray-400">{o.items?.length || 0} producto(s) en esta orden</span>
-                  </div>
-                  <span className={`rounded-full border px-2.5 py-0.5 text-xs font-bold ${getStatusStyles(o.status)}`}>
-                    {o.status}
-                  </span>
-                </div>
-
-                {/* Ítems del pedido (Muestra la lista de todos los productos del pedido) */}
-                <div className="space-y-2">
-                  {o.items?.map((item) => (
-                    <div key={item.id} className="flex justify-between text-sm text-gray-700 bg-gray-50 p-2.5 rounded-lg border border-gray-100">
-                      <div>
-                        <span className="font-bold text-gray-900">{item.product?.title ?? `Producto (ID: ${item.productId})`}</span>
-                        <span className="block text-xs text-gray-500">Cantidad transada: {item.quantity} {item.product?.unit ?? 'unidades'}</span>
-                      </div>
-                      <span className="font-extrabold text-slate-900">${Number(item.price * item.quantity).toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Pie del pedido */}
-                <div className="pt-2 border-t border-gray-100 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <span className="text-xs text-gray-400 italic">
-                    {simulatedRole === "BUYER" ? "Origen directo de finca/puerto" : `Cliente comprador: ${o.buyer?.fullName ?? "Usuario"}`}
-                  </span>
-                  
-                  <div className="flex items-center justify-between gap-4 sm:justify-end">
-                    <div className="text-left sm:text-right">
-                      <span className="text-[10px] text-gray-400 block uppercase font-bold tracking-wider">Total Acordado</span>
-                      <span className="text-base font-black text-slate-800">${Number(o.total).toLocaleString()}</span>
-                    </div>
-
-                    {/* CONTROL DE FLUJO DE ESTADOS */}
-                    {simulatedRole === "PRODUCER" && o.status === "PENDING" && (
-                      <button
-                        onClick={() => onUpdateStatus(o.id, "CONFIRMED")}
-                        disabled={updateStatusMut.isPending}
-                        className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-all"
-                      >
-                        ✅ Aceptar Pedido
-                      </button>
-                    )}
-
-                    {simulatedRole === "PRODUCER" && o.status === "CONFIRMED" && (
-                      <button
-                        onClick={() => onUpdateStatus(o.id, "DELIVERED")}
-                        disabled={updateStatusMut.isPending}
-                        className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-green-700 transition-all"
-                      >
-                        🚚 Marcar Entregado
-                      </button>
-                    )}
-                  </div>
-                </div>
-
+          {/* Lista de productos */}
+          <div className="overflow-y-auto flex-1 p-4 space-y-2">
+            {filteredProducts.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-8 text-slate-400">
+                <i className="ti ti-mood-empty text-[32px]" />
+                <p className="text-sm">No hay productos disponibles.</p>
               </div>
-            ))}
+            ) : (
+              filteredProducts.map((p) => {
+                const qty = getCartQty(p.id);
+                return (
+                  <div
+                    key={p.id}
+                    className={`flex items-center justify-between gap-3 rounded-xl border p-3 transition-colors ${
+                      qty > 0
+                        ? "border-emerald-300 bg-emerald-50"
+                        : "border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-800 truncate">{p.title}</p>
+                      <p className="text-xs text-slate-500">
+                        ${p.price.toLocaleString("es-CO")} / {p.unit} · Stock: {p.stock}
+                      </p>
+                    </div>
 
-            {!isLoading && !isError && orders.length === 0 && (
-              <div className="rounded-xl border border-dashed border-gray-300 p-10 text-center bg-white">
-                <p className="text-gray-500 text-sm">No existen órdenes registradas bajo los parámetros de este usuario.</p>
-              </div>
+                    {/* Control de cantidad */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => setCartItem(p.id, qty - 1)}
+                        disabled={qty === 0}
+                        className="w-7 h-7 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-30 text-sm font-bold"
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        value={qty || ""}
+                        onChange={(e) => setCartItem(p.id, Number(e.target.value))}
+                        min={0}
+                        max={p.stock}
+                        placeholder="0"
+                        className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                      />
+                      <button
+                        onClick={() => setCartItem(p.id, qty + 1)}
+                        disabled={qty >= p.stock}
+                        className="w-7 h-7 rounded-full border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-30 text-sm font-bold"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
 
-          {updateStatusMut.isError && (
-            <p className="rounded-lg bg-red-50 p-3 text-xs text-red-600 border border-red-100 shadow-sm">
-              🛑 Error al actualizar el estado: {String(updateStatusMut.error)}
-            </p>
-          )}
-        </div>
+          {/* Footer modal */}
+          <div className="p-4 border-t border-slate-100 space-y-3">
+            {cart.length > 0 && (
+              <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-3 text-sm space-y-1">
+                {cart.map((item) => {
+                  const p = products.find((x) => x.id === item.productId);
+                  if (!p) return null;
+                  return (
+                    <div key={item.id} className="flex justify-between text-slate-700">
+                      <span>{p.title} × {item.quantity} {p.unit}</span>
+                      <span className="font-medium text-emerald-700">
+                        ${(p.price * item.quantity).toLocaleString("es-CO")}
+                      </span>
+                    </div>
+                  );
+                })}
+                <div className="flex justify-between font-semibold text-emerald-800 pt-1 border-t border-emerald-200">
+                  <span>Total estimado</span>
+                  <span>
+                    ${cart.reduce((acc, item) => {
+                      const p = products.find((x) => x.id === item.productId);
+                      return acc + (p ? p.price * item.quantity : 0);
+                    }, 0).toLocaleString("es-CO")}
+                  </span>
+                </div>
+              </div>
+            )}
 
+            {cartError && (
+              <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700 flex items-center gap-2">
+                <i className="ti ti-alert-circle text-[15px]" />
+                {cartError}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleCreateOrder}
+                disabled={createOrderMut.isPending || cart.length === 0}
+                className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-emerald-600 py-2 text-sm text-white font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+              >
+                <i className="ti ti-check text-[15px]" />
+                {createOrderMut.isPending ? "Creando pedido…" : "Confirmar pedido"}
+              </button>
+              <button
+                onClick={() => setCartOpen(false)}
+                disabled={createOrderMut.isPending}
+                className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-slate-200 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                <i className="ti ti-x text-[15px]" />
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    )}
+  </div>
+);
 }

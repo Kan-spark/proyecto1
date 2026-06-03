@@ -1,53 +1,69 @@
 import { http } from "./http";
 import type { Product } from "./products";
 
+// ── Tipos ────────────────────────────────────────────────────────────────────
 
 export type OrderStatus = "PENDING" | "CONFIRMED" | "DELIVERED" | "CANCELLED";
 
 export type OrderItem = {
-    id: number;
-    quantity: number;
-    price: number;
-    productId: number;
-    product?: Product;
+  id: number;
+  productId: number;
+  quantity: number;
+  price: number;
+  product: Product;
+};
+
+export type OrderBuyer = {
+  fullName: string;
+  phone: string;
 };
 
 export type Order = {
-    id: number;
-    total: number;
-    status: OrderStatus;
-    buyerId: number;
-    createdAt?: string;
-    items?: OrderItem[];
-    buyer?: {
-        fullName: string;
-        phone: string;
-    };
+  id: number;
+  buyerId: number;
+  total: number;
+  status: OrderStatus;
+  createdAt: string;
+  items: OrderItem[];
+  buyer: OrderBuyer;
 };
 
+// ── DTOs ─────────────────────────────────────────────────────────────────────
+
 export type CreateOrderItemDto = {
-    productId: number;
-    quantity: number;
+  productId: number;
+  quantity: number;
 };
 
 export type CreateOrderDto = {
-    buyerId: number;
-    items: CreateOrderItemDto[];
+  items: CreateOrderItemDto[];
 };
 
 export type UpdateOrderStatusDto = {
-    status: OrderStatus;
+  status: OrderStatus;
 };
 
+// ── Llamadas ─────────────────────────────────────────────────────────────────
+
 export const ordersApi = {
-    getOne: (id: number) => http<Order>(`/orders/${id}`),
-    create: (dto: CreateOrderDto) => 
-        http<Order>("/orders", { method: "POST", body: JSON.stringify(dto) }),
-    listByUser: (userId: number, role: "BUYER" | "PRODUCER") => 
-        http<Order[]>(`/orders/user/${userId}?role=${role}`),
-    updateStatus: (id: number, status: OrderStatus) => 
-        http<Order>(`/orders/${id}/status`, { 
-            method: "PATCH", 
-            body: JSON.stringify({ status }) 
-        }),
+  /** POST /orders — crea pedido con items */
+  create: (dto: CreateOrderDto) =>
+    http<Order>("/orders", {
+      method: "POST",
+      body: JSON.stringify(dto),
+    }),
+
+  /** GET /orders/my-orders?role=BUYER|PRODUCER */
+  myOrders: (role: "BUYER" | "PRODUCER") =>
+    http<Order[]>(`/orders/my-orders?role=${role}`),
+
+  /** GET /orders/:id */
+  findOne: (id: number) => http<Order>(`/orders/${id}`),
+
+  /** PATCH /orders/:id/status */
+  updateStatus: (id: number, dto: UpdateOrderStatusDto) =>
+    http<Order>(`/orders/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(dto),
+    }),
 };

@@ -1,267 +1,318 @@
 import { useState } from "react";
-import { useAllUsers, useCreateUser, useUpdateUser, type User } from "../api/users.queries";
+import { useMyProfile, useUpdateMyProfile } from "../api/users.queries";
+import type { UpdateUserDto } from "../api/users";
+import type { Role } from "../api/auth";
 
-export default function UsersPage() {
-  // Queries de TanStack
-  const { data: users = [], isLoading, isError, error, refetch } = useAllUsers();
-  const createUserMut = useCreateUser();
-  const updateUserMut = useUpdateUser();
+export default function ProfilePage() {
+  const { data: profile, isLoading, isError, error } = useMyProfile();
+  const updateMut = useUpdateMyProfile();
 
-  // Modo del formulario: 'create' o 'edit'
-  const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
-  const [editingUserId, setEditingUserId] = useState<number | null>(null);
-
-  // Estados controlados estrictos
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState(""); 
+  const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [role, setRole] = useState<"PRODUCER" | "BUYER">("PRODUCER");
+  const [role, setRole] = useState<Role>("BUYER");
+  const [password, setPassword] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Activar el modo de edición
-  const handleEditClick = (user: User) => {
-    setFormMode('edit');
-    setEditingUserId(user.id);
-    setEmail(user.email); 
-    setFullName(user.fullName);
-    setPhone(user.phone || "");
-    setRole(user.role);
-    setPassword(""); 
-  };
-
-  // Resetear el formulario
-  const resetForm = () => {
-    setFormMode('create');
-    setEditingUserId(null);
-    setEmail("");
+  function openEdit() {
+    if (!profile) return;
+    setFullName(profile.fullName);
+    setEmail(profile.email);
+    setPhone(profile.phone);
+    setRole(profile.role);
     setPassword("");
-    setFullName("");
-    setPhone("");
-    setRole("PRODUCER");
-  };
+    setFormError(null);
+    setSuccessMsg(null);
+    setEditing(true);
+  }
 
-  // Procesar el envío (Guardar o Actualizar)
+  function validate(): string | null {
+    if (!fullName.trim()) return "El nombre completo es obligatorio.";
+    if (!email.trim()) return "El correo electrónico es obligatorio.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return "Ingresa un correo electrónico válido.";
+    if (!phone.trim()) return "El teléfono es obligatorio.";
+    if (password && password.length < 6)
+      return "La nueva contraseña debe tener al menos 6 caracteres.";
+    return null;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!fullName.trim() || !phone.trim() || !email.trim()) return;
-
-    if (formMode === 'create') {
-      if (password.length < 6) {
-        alert("La contraseña debe tener al menos 6 caracteres.");
-        return;
-      }
-
-      await createUserMut.mutateAsync({
-        email: email.trim(),
-        fullName: fullName.trim(),
-        phone: phone.trim(),
-        role,
-        password: password,
-      });
-    } else if (formMode === 'edit' && editingUserId) {
-      await updateUserMut.mutateAsync({
-        id: editingUserId,
-        dto: {
-          fullName: fullName.trim(),
-          phone: phone.trim(),
-          role, 
-        },
-      });
+    const validationError = validate();
+    if (validationError) {
+      setFormError(validationError);
+      return;
     }
+    setFormError(null);
+    const dto: UpdateUserDto = { fullName, email, phone, role };
+    if (password) dto.password = password;
+    try {
+      await updateMut.mutateAsync(dto);
+      setSuccessMsg("Perfil actualizado correctamente.");
+      setEditing(false);
+      setPassword("");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      setFormError(
+        msg.toLowerCase().includes("conflict") || msg.includes("409")
+          ? "El correo ya está en uso por otro usuario."
+          : "Error al actualizar. Intenta de nuevo."
+      );
+    }
+  }
 
-    resetForm();
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <p className="text-sm text-emerald-600 animate-pulse">Cargando perfil…</p>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">
+        Error al cargar el perfil: {String(error)}
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 font-sans">
-      
+    <div className="space-y-6 max-w-2xl">
+
       {/* Encabezado */}
-      <div className="mb-6 flex flex-col justify-between gap-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-700 p-6 text-white shadow-sm sm:flex-row sm:items-center">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Ecosistema de Usuarios</h1>
-          <p className="mt-1 text-sm text-blue-100">Panel de aprovisionamiento de cuentas y asignación de roles comerciales</p>
-        </div>
-        <button
-          onClick={() => refetch()}
-          className="rounded-lg bg-blue-800 px-4 py-2 text-sm font-bold border border-blue-500 shadow-sm hover:bg-blue-900 transition-all"
-        >
-          🔄 Refrescar Lista
-        </button>
+      <div className="pb-2 border-b border-emerald-100">
+        <h1 className="text-3xl font-bold text-emerald-800">Mi perfil</h1>
+        <p className="text-slate-500 text-sm mt-1">
+          Información de tu cuenta y productos asociados.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        
-        {/* COLUMNA INTERACTIVA: Formulario Dinámico */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm h-fit space-y-4">
-          <div className="flex justify-between items-center pb-2 border-b">
-            <h2 className="text-lg font-bold text-gray-900">
-              {formMode === 'create' ? "➕ Registrar Usuario" : "📝 Modificar Perfil"}
-            </h2>
-            {formMode === 'edit' && (
-              <button 
-                onClick={resetForm}
-                className="text-xs font-semibold text-red-500 hover:underline"
-              >
-                Cancelar Edición
-              </button>
-            )}
+      {/* Mensaje de éxito */}
+      {successMsg && (
+        <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-700 flex items-center gap-2">
+          <i className="ti ti-circle-check text-[16px]" />
+          {successMsg}
+        </div>
+      )}
+
+      {/* Tarjeta de datos */}
+      {!editing ? (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* Cabecera de la tarjeta */}
+          <div className="bg-emerald-50 border-b border-emerald-100 px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center text-white font-semibold text-sm">
+                {profile!.fullName.slice(0, 2).toUpperCase()}
+              </div>
+              <div>
+                <p className="font-semibold text-emerald-900 text-sm">{profile!.fullName}</p>
+                <p className="text-xs text-emerald-600">{profile!.role}</p>
+              </div>
+            </div>
+            <button
+              onClick={openEdit}
+              className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-50 transition-colors"
+            >
+              <i className="ti ti-edit text-[14px]" />
+              Editar
+            </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Correo Electrónico</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="ejemplo@cadenajusta.com"
-                disabled={formMode === 'edit'} 
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                required
+          <div className="p-6">
+            <div className="grid sm:grid-cols-2 gap-4 text-sm">
+              <Field label="Nombre completo" value={profile!.fullName} icon="ti-user" />
+              <Field label="Correo electrónico" value={profile!.email} icon="ti-mail" />
+              <Field label="Teléfono" value={profile!.phone} icon="ti-phone" />
+              <Field label="Rol" value={profile!.role} icon="ti-badge" />
+              <Field label="Verificado" value={profile!.isVerified ? "Sí" : "No"} icon="ti-shield-check" />
+              <Field
+                label="Miembro desde"
+                value={new Date(profile!.createdAt).toLocaleDateString("es-CO", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+                icon="ti-calendar"
               />
             </div>
+          </div>
+        </div>
+      ) : (
 
-            {/* Contraseña (Solo Creación) */}
-            {formMode === 'create' && (
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Contraseña (Mín. 6)"</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                  required
-                />
+        /* Formulario de edición */
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-emerald-50 border-b border-emerald-100 px-6 py-4">
+            <h2 className="text-base font-semibold text-emerald-900 flex items-center gap-2">
+              <i className="ti ti-edit text-[16px]" />
+              Editar perfil
+            </h2>
+          </div>
+
+          <div className="p-6">
+            {formError && (
+              <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700 flex items-center gap-2">
+                <i className="ti ti-alert-circle text-[16px]" />
+                {formError}
               </div>
             )}
 
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Nombre Completo o Empresa</label>
-              <input
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="Ej: Cooperativa Agro"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                required
-              />
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                    Nombre completo
+                  </label>
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    disabled={updateMut.isPending}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                    Correo electrónico
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    disabled={updateMut.isPending}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                    Teléfono
+                  </label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    disabled={updateMut.isPending}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                    Rol
+                  </label>
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value as Role)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white"
+                    disabled={updateMut.isPending}
+                  >
+                    <option value="BUYER">Comprador (BUYER)</option>
+                    <option value="PRODUCER">Productor (PRODUCER)</option>
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                    Nueva contraseña{" "}
+                    <span className="text-slate-400 normal-case font-normal">
+                      (dejar vacío para no cambiarla)
+                    </span>
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Mínimo 6 caracteres"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    disabled={updateMut.isPending}
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={updateMut.isPending}
+                  className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm text-white font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                >
+                  <i className="ti ti-device-floppy text-[15px]" />
+                  {updateMut.isPending ? "Guardando…" : "Guardar cambios"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditing(false)}
+                  disabled={updateMut.isPending}
+                  className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  <i className="ti ti-x text-[15px]" />
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Productos del usuario */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-emerald-50 border-b border-emerald-100 px-6 py-4 flex items-center gap-2">
+          <i className="ti ti-package text-emerald-600 text-[18px]" />
+          <h2 className="text-base font-semibold text-emerald-900">
+            Mis productos
+          </h2>
+          <span className="ml-auto text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
+            {profile!.products.length}
+          </span>
+        </div>
+
+        <div className="p-6">
+          {profile!.products.length === 0 ? (
+            <div className="flex flex-col items-center py-6 text-slate-400 gap-2">
+              <i className="ti ti-mood-empty text-[32px]" />
+              <p className="text-sm">No tienes productos registrados aún.</p>
             </div>
-
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Rol en el Mercado</label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value as any)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:border-indigo-500 focus:outline-none font-bold text-indigo-700"
-              >
-                <option value="PRODUCER">🚜 Productor (Vendedor)</option>
-                <option value="BUYER">🛒 Comprador (Aliado Comercial)</option>
-              </select>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 text-left">
+                    <th className="p-3 font-medium text-slate-500 text-xs uppercase tracking-wide">ID</th>
+                    <th className="p-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Nombre</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {profile!.products.map((p) => (
+                    <tr key={p.id} className="border-t border-slate-100 hover:bg-emerald-50 transition-colors">
+                      <td className="p-3 text-slate-400 font-mono text-xs">{p.id}</td>
+                      <td className="p-3 text-slate-700 font-medium">{p.name}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Teléfono Móvil (WhatsApp)</label>
-              <input
-                type="text"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="Ej: +57 315 987 6543"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={createUserMut.isPending || updateUserMut.isPending}
-              className={`w-full rounded-lg py-2.5 text-sm font-bold text-white shadow-sm transition-all ${
-                formMode === 'create' 
-                  ? 'bg-blue-600 hover:bg-blue-700' 
-                  : 'bg-emerald-600 hover:bg-emerald-700'
-              }`}
-            >
-              {createUserMut.isPending || updateUserMut.isPending 
-                ? "Procesando..." 
-                : formMode === 'create' ? "🚀 Crear Cuenta" : "💾 Confirmar Cambios"}
-            </button>
-          </form>
-
-          {/* Gestión de Errores */}
-          {(createUserMut.isError || updateUserMut.isError) && (
-            <p className="text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-100">
-              🛑 Error: {
-                (createUserMut.error as any)?.response?.data?.message?.toString() || 
-                (updateUserMut.error as any)?.response?.data?.message?.toString() || 
-                String(createUserMut.error || updateUserMut.error)
-              }
-            </p>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
 
-        {/* COLUMNA DE DATOS: Tabla */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <div className="bg-slate-50 p-4 border-b border-gray-200 flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-800">Cuentas Registradas</h3>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
-                {users.length} En total
-              </span>
-            </div>
+// Componente auxiliar
 
-            {isLoading && <p className="text-center text-gray-600 font-medium py-10">⏳ Solicitando base de datos completa...</p>}
-            {isError && <p className="m-4 rounded-xl bg-red-50 p-4 text-sm text-red-600 border border-red-100">⚠️ Error de conexión: {String(error)}</p>}
-
-            {!isLoading && !isError && users.length === 0 && (
-              <p className="text-center text-gray-400 py-12 text-sm italic">No hay cuentas creadas en el backend todavía.</p>
-            )}
-
-            {users.length > 0 && (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs sm:text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 bg-slate-100 font-bold text-gray-600">
-                      <th className="p-3">ID</th>
-                      <th className="p-3">Nombre / Datos de Contacto</th>
-                      <th className="p-3">Rol Contractual</th>
-                      <th className="p-3 text-center">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {users.map((u) => (
-                      <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="p-3 font-mono font-bold text-slate-400">#{u.id}</td>
-                        <td className="p-3">
-                          <div className="font-bold text-gray-900">{u.fullName}</div>
-                          <div className="text-gray-500 text-[11px]">{u.email}</div>
-                          <div className="text-gray-400 text-[11px]">📞 {u.phone || "Sin teléfono"}</div>
-                        </td>
-                        <td className="p-3">
-                          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                            u.role === 'PRODUCER'
-                              ? 'bg-green-50 text-green-700 border border-green-200'
-                              : 'bg-blue-50 text-blue-700 border border-blue-200'
-                          }`}>
-                            {u.role === 'PRODUCER' ? '🚜 PRODUCER' : '🛒 BUYER'}
-                          </span>
-                        </td>
-                        <td className="p-3 text-center">
-                          <button
-                            onClick={() => handleEditClick(u)}
-                            className="rounded bg-slate-100 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 px-2.5 py-1 text-xs font-bold text-indigo-700 shadow-sm transition-all"
-                          >
-                            ✏️ Editar
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-
+function Field({ label, value, icon }: { label: string; value: string; icon: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="mt-0.5 w-7 h-7 rounded-md bg-emerald-50 flex items-center justify-center shrink-0">
+        <i className={`ti ${icon} text-emerald-600 text-[14px]`} />
+      </div>
+      <div>
+        <p className="text-xs text-slate-400 uppercase tracking-wide mb-0.5">{label}</p>
+        <p className="text-slate-800 font-medium">{value}</p>
       </div>
     </div>
   );

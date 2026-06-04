@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useMyProfile, useUpdateMyProfile } from "../api/users.queries";
 import type { UpdateUserDto } from "../api/users";
-import type { Role } from "../api/auth";
 
 export default function ProfilePage() {
   const { data: profile, isLoading, isError, error } = useMyProfile();
@@ -11,7 +10,6 @@ export default function ProfilePage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [role, setRole] = useState<Role>("BUYER");
   const [password, setPassword] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -21,7 +19,6 @@ export default function ProfilePage() {
     setFullName(profile.fullName);
     setEmail(profile.email);
     setPhone(profile.phone);
-    setRole(profile.role);
     setPassword("");
     setFormError(null);
     setSuccessMsg(null);
@@ -47,8 +44,11 @@ export default function ProfilePage() {
       return;
     }
     setFormError(null);
-    const dto: UpdateUserDto = { fullName, email, phone, role };
+
+    // El rol nunca se incluye — el usuario no puede cambiarlo
+    const dto: UpdateUserDto = { fullName, email, phone };
     if (password) dto.password = password;
+
     try {
       await updateMut.mutateAsync(dto);
       setSuccessMsg("Perfil actualizado correctamente.");
@@ -102,7 +102,6 @@ export default function ProfilePage() {
       {/* Tarjeta de datos */}
       {!editing ? (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          {/* Cabecera de la tarjeta */}
           <div className="bg-emerald-50 border-b border-emerald-100 px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center text-white font-semibold text-sm">
@@ -201,19 +200,15 @@ export default function ProfilePage() {
                   />
                 </div>
 
+                {/* Rol: solo lectura, no editable */}
                 <div>
                   <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
                     Rol
                   </label>
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value as Role)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white"
-                    disabled={updateMut.isPending}
-                  >
-                    <option value="BUYER">Comprador (BUYER)</option>
-                    <option value="PRODUCER">Productor (PRODUCER)</option>
-                  </select>
+                  <div className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400 flex items-center justify-between">
+                    <span>{profile!.role === "BUYER" ? "Comprador (BUYER)" : "Productor (PRODUCER)"}</span>
+                    <span className="text-xs text-slate-300">No editable</span>
+                  </div>
                 </div>
 
                 <div className="sm:col-span-2">
@@ -301,8 +296,6 @@ export default function ProfilePage() {
     </div>
   );
 }
-
-// Componente auxiliar
 
 function Field({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (

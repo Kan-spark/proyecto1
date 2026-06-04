@@ -6,6 +6,7 @@ import type { Role } from "./auth";
 export type Product = {
   id: number;
   name: string;
+  title: string
   [key: string]: unknown;
 };
 

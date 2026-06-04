@@ -211,22 +211,6 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
-                    Nueva contraseña{" "}
-                    <span className="text-slate-400 normal-case font-normal">
-                      (dejar vacío para no cambiarla)
-                    </span>
-                  </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Mínimo 6 caracteres"
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                    disabled={updateMut.isPending}
-                  />
-                </div>
               </div>
 
               <div className="flex gap-3 pt-2">
@@ -278,13 +262,15 @@ export default function ProfilePage() {
                   <tr className="bg-slate-50 text-left">
                     <th className="p-3 font-medium text-slate-500 text-xs uppercase tracking-wide">ID</th>
                     <th className="p-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Nombre</th>
+                    <th className="p-3 font-medium text-slate-500 text-xs uppercase tracking-wide">Stock</th>
                   </tr>
                 </thead>
                 <tbody>
                   {profile!.products.map((p) => (
                     <tr key={p.id} className="border-t border-slate-100 hover:bg-emerald-50 transition-colors">
                       <td className="p-3 text-slate-400 font-mono text-xs">{p.id}</td>
-                      <td className="p-3 text-slate-700 font-medium">{p.name}</td>
+                      <td className="p-3 text-slate-700 font-medium">{p.title || p.name || "—"}</td>
+                      <td className="p-3 text-slate-600">{(p as any).stock ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -94,43 +94,53 @@ export default function ProductsPage() {
 
   function validate(): string | null {
     if (!form.title.trim()) return "El título es obligatorio.";
-    if (form.price < 0) return "El precio no puede ser negativo.";
+    if (!form.price || form.price <= 0) return "El precio debe ser mayor a cero.";
     if (!form.unit.trim()) return "La unidad de medida es obligatoria.";
     if (form.stock < 0) return "El stock no puede ser negativo.";
     if (!form.location.trim()) return "La ubicación es obligatoria.";
     return null;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const validationError = validate();
-    if (validationError) { setFormError(validationError); return; }
-    setFormError(null);
 
-    // Limpia campos opcionales vacíos
-    const payload: CreateProductDto = {
-      ...form,
-      description: form.description || undefined,
-      imageUrl: form.imageUrl || undefined,
-    };
+async function handleSubmit(e: React.FormEvent) {
+  e.preventDefault();
+  const validationError = validate();
+  if (validationError) { setFormError(validationError); return; }
+  setFormError(null);
 
-    try {
-      if (editingProduct) {
-        const dto: UpdateProductDto = payload;
-        await updateMut.mutateAsync({ id: editingProduct.id, dto });
-      } else {
-        await createMut.mutateAsync(payload);
-      }
-      closeModal();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "";
-      setFormError(
-        msg.includes("403") || msg.toLowerCase().includes("forbidden")
-          ? "No tienes permisos para realizar esta acción."
-          : "Error al guardar el producto. Intenta de nuevo."
-      );
+  try {
+    if (editingProduct) {
+      // ✅ Solo envía los campos que cambiaron respecto al producto original
+      const dto: UpdateProductDto = {};
+      if (form.title !== editingProduct.title) dto.title = form.title;
+      if (form.description !== (editingProduct.description ?? "")) dto.description = form.description || undefined;
+      if (form.price !== editingProduct.price) dto.price = form.price;
+      if (form.unit !== editingProduct.unit) dto.unit = form.unit;
+      if (form.stock !== editingProduct.stock) dto.stock = form.stock;
+      if (form.location !== editingProduct.location) dto.location = form.location;
+      if (form.category !== editingProduct.category) dto.category = form.category;
+      if (form.imageUrl !== (editingProduct.imageUrl ?? "")) dto.imageUrl = form.imageUrl || undefined;
+
+      await updateMut.mutateAsync({ id: editingProduct.id, dto });
+    } else {
+      // Crear: envía todo
+      const payload: CreateProductDto = {
+        ...form,
+        description: form.description || undefined,
+        imageUrl: form.imageUrl || undefined,
+      };
+      await createMut.mutateAsync(payload);
     }
+    closeModal();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    setFormError(
+      msg.includes("403") || msg.toLowerCase().includes("forbidden")
+        ? "No tienes permisos para realizar esta acción."
+        : "Error al guardar el producto. Intenta de nuevo."
+    );
   }
+}
 
   async function handleDelete(p: Product) {
     if (!confirm(`¿Seguro que deseas eliminar "${p.title}"?`)) return;
@@ -456,9 +466,13 @@ return (
                 </label>
                 <input
                   type="number"
-                  value={form.price}
-                  onChange={(e) => setField("price", Number(e.target.value))}
+                  value={form.price === 0 ? "" : form.price}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setField("price", val === "" ? 0 : Number(val));
+                  }}
                   min={0}
+                  placeholder="0"
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
                   disabled={createMut.isPending || updateMut.isPending}
                 />
@@ -484,9 +498,13 @@ return (
                 </label>
                 <input
                   type="number"
-                  value={form.stock}
-                  onChange={(e) => setField("stock", Number(e.target.value))}
+                  value={form.stock === 0 ? "" : form.stock}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setField("stock", val === "" ? 0 : Number(val));
+                  }}
                   min={0}
+                  placeholder="0"
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
                   disabled={createMut.isPending || updateMut.isPending}
                 />

@@ -4,7 +4,7 @@ type Props = {
 };
 
 const navItems = [
-  { key: "users",    label: "Usuarios",  icon: "ti-users"         },
+  { key: "users",    label: "Perfil",  icon: "ti-users"         },
   { key: "products", label: "Productos", icon: "ti-package"       },
   { key: "orders",   label: "Pedidos",   icon: "ti-shopping-cart" },
   { key: "reviews",  label: "Reseñas",   icon: "ti-star"          },
